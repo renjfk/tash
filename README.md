@@ -75,9 +75,15 @@ cd tash
 make build
 ```
 
-The binary outputs to `bin/tash`. Run `tash init` to generate your profile and install fish shell hooks.
+The binary outputs to `bin/tash`.
 
 ## Setup
+
+> [!IMPORTANT]
+> Set your API key before running `tash init`:
+> ```bash
+> set -Ux ANTHROPIC_API_KEY your-key
+> ```
 
 `tash init` generates your user profile from shell history, creates a default config, and installs fish hooks
 into `~/.config/fish/conf.d/tash.fish`. Two abbreviations are added:
