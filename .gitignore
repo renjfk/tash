@@ -1,0 +1,7 @@
+bin/
+dist/
+*.log
+*.log.old
+.DS_Store
+.idea/
+.ruff_cache/

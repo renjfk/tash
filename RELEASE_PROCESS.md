@@ -1,0 +1,106 @@
+# Manual Release Process Guide
+
+This document describes the step-by-step manual release process for tash using AI assistance to analyze commits, generate release notes, and trigger the GitHub Actions workflow via opencode (with `gh` CLI integration).
+
+## Overview
+
+The manual release process involves:
+
+1. **AI-driven commit analysis** - Analyze commit history since last release
+2. **AI-generated release notes** following strict formatting conventions
+3. **Preview and review** - release notes shown before any actions taken
+4. **Human review and approval** for quality control
+5. **Workflow dispatch** - trigger GitHub Actions via `gh` CLI
+6. **Automated build and release** - existing workflow handles build, sign, notarize, and publish
+
+## Prerequisites
+
+- [opencode](https://opencode.ai/) installed
+- [GitHub CLI (`gh`)](https://cli.github.com) installed and authenticated (`gh auth login`)
+- Understanding of conventional commit patterns
+- Familiarity with major.minor versioning (no patch versions)
+
+## AI-Assisted Release Process
+
+Use this prompt in opencode to handle the entire release process:
+
+### Master Release Prompt
+
+```
+I need to create a new release for tash. Please:
+
+STEP 1: ANALYZE COMMITS
+- Use `gh` CLI or available tools to get the latest release tag
+- Fetch all commits between that tag and current HEAD
+- Analyze each commit for user-facing changes
+
+STEP 2: GENERATE RELEASE NOTES
+Create structured release notes with this EXACT format:
+
+### Breaking Changes
+[Only if breaking changes exist - triggers major version]
+- Description focusing on user impact (abc1234)
+
+### New Features
+- Feature description emphasizing user benefit (abc1234)
+
+### Improvements  
+- Improvement description with user impact (abc1234)
+
+### Bug Fixes
+- Fix description focusing on resolved user issue (abc1234)
+
+REQUIREMENTS:
+- Focus ONLY on user-facing changes and impact
+- EXCLUDE: docs, build, ci, chore, refactor, test commits  
+- Use active voice, present tense
+- Include commit short hashes (GitHub renders as links)
+- Version logic: major.minor format only (no patch)
+  - MINOR version (1.1 → 1.2): New features, bug fixes, improvements
+  - MAJOR version (1.2 → 2.0): Breaking changes detected
+- Show this preview BEFORE any actions
+
+STEP 3: SHOW PREVIEW
+Display the generated release notes and ask for approval before proceeding.
+
+STEP 4: TRIGGER WORKFLOW (after approval)
+Use `gh workflow run` to trigger the "Build and Release" workflow:
+
+```bash
+gh workflow run release.yml \
+  -f release_tag="v[VERSION]" \
+  -f release_notes="[generated content]" \
+  -f draft=true \
+  -f prerelease=false
+```
+
+Please start with Step 1 - analyze the commits and show me the preview.
+```
+
+## How It Works
+
+opencode will:
+1. **Analyze commits** since last release via `gh` CLI
+2. **Generate release notes** with proper formatting and categorization  
+3. **Show preview** and ask for approval
+4. **Trigger GitHub Actions workflow** with the release notes
+5. **GoReleaser** builds cross-platform binaries (darwin + linux, amd64 + arm64), signs and notarizes macOS binaries, and publishes the GitHub Release
+
+## Features
+
+- **Automatic filtering** of technical commits (docs, tests, CI, etc.)
+- **User-focused** release notes with clear impact descriptions
+- **Smart versioning** - minor for features/fixes, major for breaking changes
+- **Preview before action** - human approval required
+- **Cross-platform binaries** - GoReleaser produces signed binaries for all supported platforms
+
+## Troubleshooting
+
+- **gh CLI issues**: Run `gh auth status` to verify authentication
+- **Workflow dispatch failed**: Check repository permissions for workflow dispatch
+- **Invalid release notes**: Review format requirements and regenerate
+- **Signing fails**: Verify `MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`, `MACOS_NOTARY_ISSUER_ID`, `MACOS_NOTARY_KEY_ID`, and `MACOS_NOTARY_KEY` secrets are configured in the repository
+
+---
+
+*Use the master prompt above to start your next release.*

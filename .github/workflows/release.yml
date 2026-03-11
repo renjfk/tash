@@ -1,0 +1,124 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes content (markdown supported)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push release tag
+        run: |
+          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create tag if it doesn't exist
+          if ! git rev-parse "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Creating new tag: $RELEASE_TAG"
+            git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+            git push origin "$RELEASE_TAG"
+          else
+            echo "Tag $RELEASE_TAG already exists"
+          fi
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          VERSION=${RELEASE_TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Setting version to: $VERSION"
+
+      - name: Save release notes
+        run: |
+          cat << 'EOF' > release_notes.md
+          ${{ github.event.inputs.release_notes }}
+          EOF
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release_notes.md
+
+  release:
+    name: Build, Sign and Release
+    runs-on: macos-latest
+    needs: prepare
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.release_tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: /tmp/release
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: >-
+            release --clean
+            --release-notes=/tmp/release/release_notes.md
+            ${{ github.event.inputs.draft == 'true' && '--draft' || '' }}
+            ${{ github.event.inputs.prerelease == 'true' && '--config .goreleaser.prerelease.yaml' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Mark as pre-release
+        if: ${{ github.event.inputs.prerelease == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ github.event.inputs.release_tag }}" --prerelease
