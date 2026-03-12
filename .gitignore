@@ -2,6 +2,7 @@ bin/
 dist/
 *.log
 *.log.old
+coverage.out
 .DS_Store
 .idea/
 .ruff_cache/
