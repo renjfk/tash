@@ -24,6 +24,7 @@ make clean          # rm -rf bin/
 ```
 
 Run a single test:
+
 ```bash
 go test ./internal/data/ -run TestSomething -v
 ```
@@ -70,14 +71,14 @@ alphabetically within each group.
 
 ```go
 import (
-    "fmt"
-    "os"
-    "strings"
+"fmt"
+"os"
+"strings"
 
-    "github.com/charmbracelet/lipgloss"
+"github.com/charmbracelet/lipgloss"
 
-    "github.com/renjfk/tash/internal/ai"
-    "github.com/renjfk/tash/internal/data"
+"github.com/renjfk/tash/internal/ai"
+"github.com/renjfk/tash/internal/data"
 )
 ```
 
@@ -160,18 +161,27 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - The binary owns stdin/stdout during `tash query`. TUI goes to stderr, command result
   to stdout. Fish captures stdout via command substitution and places it in the command
   line buffer via `commandline -r`. Single commands skip the TUI prompt entirely.
-- AI decides response type: `command` (with optional explanation), `chat`, or `history` request.
+- AI decides response type: `command` (with optional explanation), `chat`, `history` request, `memory` (store a fact),
+  or `plan` (iterative step-by-step execution).
 - All input goes to the AI -- no local typo detection or filtering.
-- `tash tick` records failed shell commands into conversation state (successful commands skip tick entirely). Must return instantly.
+- `tash tick` records failed shell commands into conversation state (successful commands skip tick entirely). Must
+  return instantly.
 - `profile.md` System section is hardcoded facts (OS, arch, shell), not AI-generated.
-- `conversation.jsonl` is append-only. Reads from tail via reverse reader, capped at 250 entries + 50 memories in memory.
-- Retry loop uses the same model for all attempts (single model config). Tool calls (history, memory) don't count as failures. Capped at 2 tool calls per query.
-- Multi-step commands execute inline sequentially, not batched to fish. The last command is returned to fish's command line buffer.
-- AI can request more context (filtered by regex) via `{"type": "history"}` response; searches both fish history and conversation entries, deduplicated against what's already in the prompt.
+- `conversation.jsonl` is append-only. Reads from tail via reverse reader, capped at 250 entries + 50 memories in
+  memory.
+- Retry loop uses the same model for all attempts (single model config). Tool calls (history, memory) don't count as
+  failures. Capped at 2 tool calls per query.
+- Multi-step commands execute inline sequentially, not batched to fish. The last command is returned to fish's command
+  line buffer.
+- Plan mode: AI returns one command at a time with `steps_remaining`; command is executed, output captured (capped at
+  4KB), and fed back as context for the next AI call. The AI dynamically decides the next step based on real output.
+- AI can request more context (filtered by regex) via `{"type": "history"}` response; searches both fish history and
+  conversation entries, deduplicated against what's already in the prompt.
 
 ## Roadmap
 
 ### Done
+
 - [x] CLI skeleton with query, tick, init subcommands
 - [x] profile.md read/write + AI-driven rebuild (facts-only: system, tools, commands)
 - [x] Anthropic API client (model name passed directly from config)
@@ -209,7 +219,8 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - [x] Trace lines after TUI actions (>, x) so suggestions stay visible on screen
 - [x] Companion face character (◕‿◕) in spinner and greeting with animated expressions
 - [x] `tash greet` subcommand with randomized face + message (called from fish_greeting)
-- [x] Agentic history tool searches both fish history and conversation entries (queries, commands, chat), deduplicated against prompt context
+- [x] Agentic history tool searches both fish history and conversation entries (queries, commands, chat), deduplicated
+  against prompt context
 - [x] Memory cap: configurable max_memories (default 50), oldest dropped when exceeded
 - [x] Conversation file: append-only, no TTL, reverse reader for efficient tail loading
 - [x] SearchHistory streams with ring buffer (no full file allocation)
@@ -223,7 +234,8 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - [x] TUI styles use explicit stderr renderer (fixes colors in fish command substitution)
 - [x] Stdin drain after TUI exit (prevents OSC escape sequence leak to shell)
 - [x] Tool call cap (max 2) with forced constraint when exhausted
-- [x] Switch API client to generic OpenAI-compatible endpoint (use Anthropic compatibility layer, configurable endpoint in config.yaml)
+- [x] Switch API client to generic OpenAI-compatible endpoint (use Anthropic compatibility layer, configurable endpoint
+  in config.yaml)
 - [x] Track token usage in state file per action for cost/usage calculations
 - [x] `tash version` subcommand (prints version from build-time ldflags)
 - [x] `tash usage` subcommand with `--reset` flag (shows token usage stats per action)
@@ -233,10 +245,13 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - [x] Fish short aliases: `t` (tash) and `q` (tash query) as fish functions in tash.fish
 - [x] Tick skipped on successful commands (exit 0) — zero tash overhead on happy path
 - [x] `__tash_handled` tick branch runs in background (`&`) to avoid blocking prompt
-- [x] Color theme system: 13 presets (solarized, gruvbox, nord, dracula, monokai, catppuccin, tokyo-night, rose-pine, kanagawa, everforest, onedark, nightfox) + custom hex via config
+- [x] Color theme system: 12 presets (solarized, gruvbox, nord, dracula, monokai, catppuccin, tokyo-night, rose-pine,
+  kanagawa, everforest, onedark, nightfox) + custom hex via config
 - [x] Theme colors sourced from zellij `ribbon_selected.background` (active tab accent)
 - [x] `tash init` prints stats: history entries analyzed, unique commands, binaries in PATH
 - [x] Production builds (`make dist` / goreleaser) strip symbols and debug info (`-s -w`)
+- [x] Plan mode: AI returns one command at a time with `steps_remaining`, executes it, captures output (4KB cap), feeds
+  back for dynamic next-step planning
 
 - [x] GoReleaser integration (.goreleaser.yaml) with macOS signing and notarization
 - [x] GitHub Actions release workflow (manual dispatch with release tag, notes, draft/prerelease)

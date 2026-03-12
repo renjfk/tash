@@ -102,6 +102,12 @@ func (c *Config) DataDir() string {
 	return c.dataDir
 }
 
+// SetDataDir overrides the data directory path.
+// Intended for testing only.
+func (c *Config) SetDataDir(dir string) {
+	c.dataDir = dir
+}
+
 // APIKey returns the API key from the configured environment variable.
 func (c *Config) APIKey() string {
 	return os.Getenv(c.Model.APIKeyEnv)

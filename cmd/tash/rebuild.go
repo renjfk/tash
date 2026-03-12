@@ -44,7 +44,7 @@ func rebuildProfile(cfg *data.Config, input *RebuildInput) (string, error) {
 	}
 
 	if err := data.RecordUsage(cfg.DataDir(), "rebuild", cfg.Model.Name, resp.Usage.PromptTokens, resp.Usage.CompletionTokens); err != nil {
-		fmt.Fprintf(os.Stderr, "tash: warning: record usage: %v\n", err)
+		data.Warn(fmt.Sprintf("record usage: %v", err))
 	}
 
 	return systemSection() + "\n" + resp.Content, nil

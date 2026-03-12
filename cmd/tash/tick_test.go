@@ -187,6 +187,52 @@ func TestIsUpdateRunning_StalePID(t *testing.T) {
 	}
 }
 
+func TestIsUpdateRunning_InvalidPID(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, pidFile), []byte("not-a-number"), 0644)
+	if isUpdateRunning(dir) {
+		t.Error("expected false for invalid PID")
+	}
+}
+
+func TestScanPATH_EmptyPath(t *testing.T) {
+	t.Setenv("PATH", "")
+	binaries := scanPATH()
+	if binaries != nil {
+		t.Error("expected nil for empty PATH")
+	}
+}
+
+func TestScanPATH_NonexistentDir(t *testing.T) {
+	t.Setenv("PATH", "/nonexistent/dir/for/test")
+	binaries := scanPATH()
+	if len(binaries) != 0 {
+		t.Errorf("expected 0 binaries for nonexistent dir, got %d", len(binaries))
+	}
+}
+
+func TestScanPATH_Dedup(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	// Same binary name in both dirs
+	_ = os.WriteFile(filepath.Join(dir1, "mybinary"), []byte("#!/bin/sh\n"), 0755)
+	_ = os.WriteFile(filepath.Join(dir2, "mybinary"), []byte("#!/bin/sh\n"), 0755)
+
+	t.Setenv("PATH", dir1+":"+dir2)
+	binaries := scanPATH()
+
+	count := 0
+	for _, b := range binaries {
+		if b == "mybinary" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected mybinary once (deduped), got %d", count)
+	}
+}
+
 func TestScanPATH(t *testing.T) {
 	dir := t.TempDir()
 
