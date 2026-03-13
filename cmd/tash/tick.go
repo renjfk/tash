@@ -196,12 +196,55 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 	return writeLastUpdate(dataDir, time.Now().Unix())
 }
 
+// handleFailedCommand checks whether a failed command should be auto-intercepted.
+// It catches failed CLI commands where the binary exists in PATH (e.g. "helm update",
+// "git push --forc"), and natural language typed into the shell (3+ words with no
+// shell syntax). Exits with code 7 to signal the fish hook to invoke tash query.
 func handleFailedCommand(command string) {
-	if looksLikeNaturalLanguage(command) {
-		slog.Debug("auto-intercept: natural language detected", "command", command)
+	words := strings.Fields(command)
+	if len(words) < 2 {
+		slog.Debug("auto-intercept: too few words, skipping", "command", command)
+		return
+	}
+
+	// Reject shell pipelines and compound commands — these are intentional
+	// constructs, not typos or natural language
+	if strings.ContainsAny(command, "|;&><$`(){}") {
+		slog.Debug("auto-intercept: has shell operators, skipping", "command", command)
+		return
+	}
+
+	// If the first word is a real binary in PATH, intercept — the user ran a
+	// valid tool with wrong args/subcommand (e.g. "helm update", "git push --forc")
+	if _, err := exec.LookPath(words[0]); err == nil {
+		slog.Debug("auto-intercept: failed command with valid binary", "command", command)
 		os.Exit(7)
 	}
-	slog.Debug("auto-intercept: not natural language, skipping", "command", command)
+
+	// 3+ words without shell syntax: likely natural language
+	if len(words) < 3 {
+		slog.Debug("auto-intercept: 2 words, first not in PATH, skipping", "command", command)
+		return
+	}
+
+	// Reject flags, paths, assignments, and file-like arguments
+	for _, w := range words {
+		if strings.HasPrefix(w, "-") ||
+			strings.Contains(w, "/") ||
+			strings.Contains(w, "=") {
+			slog.Debug("auto-intercept: has flags/paths/assignments, skipping", "command", command)
+			return
+		}
+	}
+	for _, w := range words[1:] {
+		if strings.Contains(w, ".") && !strings.HasSuffix(w, ".") {
+			slog.Debug("auto-intercept: has file-like argument, skipping", "command", command)
+			return
+		}
+	}
+
+	slog.Debug("auto-intercept: natural language detected", "command", command)
+	os.Exit(7)
 }
 
 func forkUpdate() error {
@@ -221,33 +264,6 @@ func forkUpdate() error {
 
 	slog.Debug("forked background update", "pid", cmd.Process.Pid)
 	return nil
-}
-
-func looksLikeNaturalLanguage(command string) bool {
-	words := strings.Fields(command)
-	if len(words) < 3 {
-		return false
-	}
-
-	for _, w := range words {
-		if strings.HasPrefix(w, "-") ||
-			strings.Contains(w, "/") ||
-			strings.Contains(w, "=") {
-			return false
-		}
-	}
-
-	if strings.ContainsAny(command, "|;&><$`(){}") {
-		return false
-	}
-
-	for _, w := range words[1:] {
-		if strings.Contains(w, ".") && !strings.HasSuffix(w, ".") {
-			return false
-		}
-	}
-
-	return true
 }
 
 func readLastUpdate(dataDir string) (int64, error) {

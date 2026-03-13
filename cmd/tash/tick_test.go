@@ -2,24 +2,39 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
 )
 
-func TestLooksLikeNaturalLanguage(t *testing.T) {
+func TestHandleFailedCommand(t *testing.T) {
 	tests := []struct {
 		name    string
 		command string
-		want    bool
+		want    bool // true = should intercept (exit 7)
 	}{
+		// Failed CLI commands (first word is valid binary in PATH)
+		{"helm update", "helm update", true},
+		{"git staus", "git staus", true},
+		{"docker stopp", "docker stopp", true},
+		{"binary with flag", "git push --forc", true},
+		{"binary with path arg", "cat /nonexistent/file", true},
+		{"binary with assignment", "env FOO=bar notacommand", true},
+
+		// Natural language (3+ words, first word NOT in PATH)
 		{"natural language", "show me all docker containers", true},
 		{"find files", "find files with errors", true},
-		{"too few words", "git status", false},
+		{"trailing dot ok", "do something now.", true},
+
+		// Too few words
 		{"single word", "ls", false},
-		{"has dash flag", "curl -s http://example.com", false},
-		{"has slash", "cat /etc/hosts", false},
-		{"has equals", "VAR=1 cmd arg", false},
+		{"empty", "", false},
+
+		// 2 words but first word not in PATH
+		{"first word not in PATH", "notarealcommand123 subcommand", false},
+
+		// Shell operators (always rejected)
 		{"has pipe", "ls | grep foo", false},
 		{"has semicolon", "echo hello; echo world", false},
 		{"has ampersand", "cmd1 && cmd2", false},
@@ -28,16 +43,40 @@ func TestLooksLikeNaturalLanguage(t *testing.T) {
 		{"has backtick", "echo `date` something else", false},
 		{"has parens", "echo (date) something else", false},
 		{"has braces", "echo {a,b} something else", false},
-		{"has dot in arg", "python script.py extra args", false},
-		{"trailing dot ok", "do something now.", true},
-		{"empty", "", false},
+
+		// Natural language filters (first word NOT in PATH)
+		{"nl has dash flag", "notarealcmd123 -s something", false},
+		{"nl has slash", "notarealcmd123 /etc/hosts extra", false},
+		{"nl has equals", "notarealcmd123 FOO=1 extra", false},
+		{"nl has dot in arg", "notarealcmd123 script.py extra", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := looksLikeNaturalLanguage(tt.command)
-			if got != tt.want {
-				t.Errorf("looksLikeNaturalLanguage(%q) = %v, want %v", tt.command, got, tt.want)
+			if os.Getenv("TEST_HANDLE_FAILED_CMD") == "1" {
+				handleFailedCommand(os.Getenv("TEST_COMMAND"))
+				return
+			}
+
+			cmd := exec.Command(os.Args[0], "-test.run=^TestHandleFailedCommand$/^"+tt.name+"$")
+			cmd.Env = append(os.Environ(),
+				"TEST_HANDLE_FAILED_CMD=1",
+				"TEST_COMMAND="+tt.command,
+			)
+			err := cmd.Run()
+
+			if tt.want {
+				// Should have exited with code 7
+				if err == nil {
+					t.Errorf("handleFailedCommand(%q): expected exit 7, got success", tt.command)
+				} else if exitErr, ok := err.(*exec.ExitError); !ok || exitErr.ExitCode() != 7 {
+					t.Errorf("handleFailedCommand(%q): expected exit 7, got %v", tt.command, err)
+				}
+			} else {
+				// Should have returned normally (exit 0)
+				if err != nil {
+					t.Errorf("handleFailedCommand(%q): expected no exit, got %v", tt.command, err)
+				}
 			}
 		})
 	}
