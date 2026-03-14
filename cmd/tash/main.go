@@ -49,6 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	data.RegisterThemeNames(tui.ThemeNames())
 	closeLog := data.InitLogger(cfg.DataDir(), cfg.LogLevel)
 	defer closeLog()
 

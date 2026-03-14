@@ -218,6 +218,9 @@ func TestLoadConfig_DefaultsWhenNoFile(t *testing.T) {
 }
 
 func TestRenderConfig_Comments(t *testing.T) {
+	RegisterThemeNames([]string{"solarized", "gruvbox", "nord"})
+	defer RegisterThemeNames(nil)
+
 	cfg := DefaultConfig()
 	data, err := renderConfig(cfg)
 	if err != nil {
@@ -240,13 +243,14 @@ func TestRenderConfig_Comments(t *testing.T) {
 		}
 	}
 
-	// Verify field-level comments
+	// Verify field-level comments are dynamically generated from slices
 	for _, want := range []string{
 		"# model identifier sent to the API",
 		"# retry attempts on API or parse failures",
 		"# seconds between automatic profile rebuilds",
 		"# color profile: auto, 256, 16, none",
-		"# preset:",
+		"# preset: solarized, gruvbox, nord",
+		"# log verbosity written to tash.log: debug, info, warn, error",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing comment %q in rendered config", want)
@@ -259,6 +263,21 @@ func TestRenderConfig_Comments(t *testing.T) {
 	}
 	if !strings.Contains(out, "solarized") {
 		t.Error("missing default theme name in rendered config")
+	}
+}
+
+func TestRenderConfig_NoThemes(t *testing.T) {
+	RegisterThemeNames(nil)
+
+	cfg := DefaultConfig()
+	data, err := renderConfig(cfg)
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+
+	out := string(data)
+	if !strings.Contains(out, "# preset theme name") {
+		t.Error("expected fallback theme comment when no themes registered")
 	}
 }
 

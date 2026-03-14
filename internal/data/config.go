@@ -1,9 +1,11 @@
 package data
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -117,10 +119,10 @@ func LoadConfig() (*Config, error) {
 func (c *Config) validate() {
 	def := DefaultConfig()
 
-	if !validLogLevel[c.LogLevel] {
+	if !isValid(c.LogLevel, logLevels) {
 		c.LogLevel = def.LogLevel
 	}
-	if !validTerminalColor[c.Terminal.Color] {
+	if !isValid(c.Terminal.Color, terminalColors) {
 		c.Terminal.Color = def.Terminal.Color
 	}
 	if c.Model.MaxTokens <= 0 {
@@ -140,12 +142,25 @@ func (c *Config) validate() {
 	}
 }
 
-var validLogLevel = map[string]bool{
-	"debug": true, "info": true, "warn": true, "error": true,
+var logLevels = []string{"debug", "info", "warn", "error"}
+var terminalColors = []string{"auto", "256", "16", "none"}
+
+// themeNames is set by RegisterThemeNames at startup. Falls back to empty.
+var themeNames []string
+
+// RegisterThemeNames sets the available theme names for config comments.
+// Called once at startup from cmd/tash with tui.ThemeNames().
+func RegisterThemeNames(names []string) {
+	themeNames = names
 }
 
-var validTerminalColor = map[string]bool{
-	"auto": true, "256": true, "16": true, "none": true,
+func isValid(value string, options []string) bool {
+	for _, opt := range options {
+		if value == opt {
+			return true
+		}
+	}
+	return false
 }
 
 // DataDir returns the tash data directory path.
@@ -216,12 +231,15 @@ func renderConfig(c *Config) ([]byte, error) {
 		doc = doc.Content[0]
 	}
 
-	annotateNode(doc, configComments)
-	out, err := yaml.Marshal(&node)
-	if err != nil {
+	annotateNode(doc, buildConfigComments())
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&node); err != nil {
 		return nil, fmt.Errorf("marshal config: %w", err)
 	}
-	return out, nil
+	return buf.Bytes(), nil
 }
 
 // fieldComment holds the comment and optional nested comments for a YAML key.
@@ -230,51 +248,60 @@ type fieldComment struct {
 	children map[string]fieldComment
 }
 
-// configComments defines the comment hierarchy matching the Config struct.
-var configComments = map[string]fieldComment{
-	"model": {
-		comment: "AI model and endpoint configuration",
-		children: map[string]fieldComment{
-			"name":        {comment: "model identifier sent to the API"},
-			"endpoint":    {comment: "base URL for the OpenAI-compatible API"},
-			"api_key_env": {comment: "environment variable containing the API key"},
-			"max_tokens":  {comment: "maximum tokens in the AI response"},
+// buildConfigComments returns the comment hierarchy for config rendering.
+// Selection lists (themes, log levels, terminal colors) are derived from
+// their canonical slices so comments stay in sync with validation.
+func buildConfigComments() map[string]fieldComment {
+	themes := "preset theme name"
+	if len(themeNames) > 0 {
+		themes = "preset: " + strings.Join(themeNames, ", ")
+	}
+
+	return map[string]fieldComment{
+		"model": {
+			comment: "AI model and endpoint configuration",
+			children: map[string]fieldComment{
+				"name":        {comment: "model identifier sent to the API"},
+				"endpoint":    {comment: "base URL for the OpenAI-compatible API"},
+				"api_key_env": {comment: "environment variable containing the API key"},
+				"max_tokens":  {comment: "maximum tokens in the AI response"},
+			},
 		},
-	},
-	"behavior": {
-		comment: "runtime behavior settings",
-		children: map[string]fieldComment{
-			"max_retries":              {comment: "retry attempts on API or parse failures"},
-			"max_memories":             {comment: "maximum durable memories kept in conversation history"},
-			"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
-			"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},
-			"screen_capture_max_lines": {comment: "maximum lines the AI can request from terminal scrollback"},
+		"behavior": {
+			comment: "runtime behavior settings",
+			children: map[string]fieldComment{
+				"max_retries":              {comment: "retry attempts on API or parse failures"},
+				"max_memories":             {comment: "maximum durable memories kept in conversation history"},
+				"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
+				"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},
+				"screen_capture_max_lines": {comment: "maximum lines the AI can request from terminal scrollback"},
+			},
 		},
-	},
-	"profile": {
-		comment: "user profile rebuild settings",
-		children: map[string]fieldComment{
-			"rebuild_interval": {comment: "seconds between automatic profile rebuilds"},
-			"history_path":     {comment: "path to fish shell history file (~ is expanded)"},
+		"profile": {
+			comment: "user profile rebuild settings",
+			children: map[string]fieldComment{
+				"rebuild_interval": {comment: "seconds between automatic profile rebuilds"},
+				"history_path":     {comment: "path to fish shell history file (~ is expanded)"},
+			},
 		},
-	},
-	"theme": {
-		comment: "spinner and accent color theme",
-		children: map[string]fieldComment{
-			"name":  {comment: "preset: solarized, gruvbox, nord, dracula, monokai, catppuccin,\ntokyo-night, rose-pine, kanagawa, everforest, onedark, nightfox"},
-			"color": {comment: "custom hex color (e.g. \"#FF4085\"), overrides name when set"},
+		"theme": {
+			comment: "spinner and accent color theme",
+			children: map[string]fieldComment{
+				"name":  {comment: themes},
+				"color": {comment: "custom hex color (e.g. \"#FF4085\"), overrides name when set"},
+			},
 		},
-	},
-	"terminal": {
-		comment: "terminal compatibility settings",
-		children: map[string]fieldComment{
-			"ascii": {comment: "use ASCII-only characters, no Unicode (true/false)"},
-			"color": {comment: "color profile: auto, 256, 16, none"},
+		"terminal": {
+			comment: "terminal compatibility settings",
+			children: map[string]fieldComment{
+				"ascii": {comment: "use ASCII-only characters, no Unicode (true/false)"},
+				"color": {comment: "color profile: " + strings.Join(terminalColors, ", ")},
+			},
 		},
-	},
-	"log_level": {
-		comment: "log verbosity written to tash.log: debug, info, warn, error",
-	},
+		"log_level": {
+			comment: "log verbosity written to tash.log: " + strings.Join(logLevels, ", "),
+		},
+	}
 }
 
 // annotateNode walks a mapping node and sets HeadComment from the comments map.

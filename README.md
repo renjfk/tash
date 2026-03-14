@@ -122,7 +122,7 @@ inline comments describing each field and its valid values. Invalid values are s
 | `behavior.screen_capture`           | Capture terminal screen content for AI context                 |
 | `behavior.screen_capture_max_lines` | Maximum lines to capture from terminal screen                  |
 | `profile.rebuild_interval`          | Seconds between background profile rebuilds from shell history |
-| `theme.name`                        | Preset theme (see comments in config for full list)            |
+| `theme.name`                        | Preset theme (see below)                                       |
 | `theme.color`                       | Custom hex color, overrides theme name                         |
 | `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals        |
 | `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`            |
