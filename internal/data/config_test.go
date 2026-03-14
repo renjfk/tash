@@ -42,6 +42,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Profile.RebuildInterval != 3600 {
 		t.Errorf("expected 3600, got %d", cfg.Profile.RebuildInterval)
 	}
+	if cfg.Terminal.ASCII {
+		t.Error("expected terminal.ascii false by default")
+	}
+	if cfg.Terminal.Color != "auto" {
+		t.Errorf("expected terminal.color auto, got %q", cfg.Terminal.Color)
+	}
 }
 
 func TestDataDir(t *testing.T) {

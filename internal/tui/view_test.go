@@ -18,15 +18,18 @@ func TestFace_DefaultExpression(t *testing.T) {
 	if f == "" {
 		t.Error("face(0) returned empty string")
 	}
-	// Should be one of the known faces
-	knownFaces := map[string]bool{
-		"(◕‿◕)": true,
-		"(◐‿◐)": true,
-		"(◑‿◑)": true,
-		"(◔‿◔)": true,
-		"(-‿-)": true,
-		"(◡‿◡)": true,
+	// Should be one of the known faces from active charset
+	chars := activeChars
+	knownFaces := make(map[string]bool)
+	for _, fc := range chars.Faces {
+		knownFaces[fc] = true
 	}
+	for _, fc := range chars.Glances {
+		knownFaces[fc] = true
+	}
+	knownFaces[chars.Blink] = true
+	knownFaces[chars.Sleepy] = true
+	knownFaces[chars.Default] = true
 	if !knownFaces[f] {
 		t.Errorf("face(0) returned unknown face: %q", f)
 	}
@@ -37,9 +40,10 @@ func TestFace_SleepyAfter200(t *testing.T) {
 	defer func() { faceSeed = old }()
 	faceSeed = 42
 
+	chars := activeChars
 	f := face(201)
 	// After frame 200, should return sleepy face unless in a blink
-	if f != "(◡‿◡)" && f != "(-‿-)" {
+	if f != chars.Sleepy && f != chars.Blink {
 		t.Errorf("face(201) = %q, expected sleepy or blink", f)
 	}
 }
@@ -49,10 +53,11 @@ func TestFace_BlinkDetection(t *testing.T) {
 	defer func() { faceSeed = old }()
 	faceSeed = 12345
 
+	chars := activeChars
 	// Scan first 200 frames, should find at least one blink
 	blinks := 0
 	for i := 0; i < 200; i++ {
-		if face(i) == "(-‿-)" {
+		if face(i) == chars.Blink {
 			blinks++
 		}
 	}
