@@ -34,9 +34,11 @@ type ModelConfig struct {
 
 // BehaviorConfig holds runtime behavior settings.
 type BehaviorConfig struct {
-	MaxRetries    int  `yaml:"max_retries"`
-	MaxMemories   int  `yaml:"max_memories"`
-	AutoIntercept bool `yaml:"auto_intercept"`
+	MaxRetries            int  `yaml:"max_retries"`
+	MaxMemories           int  `yaml:"max_memories"`
+	AutoIntercept         bool `yaml:"auto_intercept"`
+	ScreenCapture         bool `yaml:"screen_capture"`
+	ScreenCaptureMaxLines int  `yaml:"screen_capture_max_lines"`
 }
 
 // ProfileConfig holds profile rebuild settings.
@@ -55,9 +57,11 @@ func DefaultConfig() *Config {
 			MaxTokens: 2048,
 		},
 		Behavior: BehaviorConfig{
-			MaxRetries:    3,
-			MaxMemories:   50,
-			AutoIntercept: true,
+			MaxRetries:            3,
+			MaxMemories:           50,
+			AutoIntercept:         true,
+			ScreenCapture:         true,
+			ScreenCaptureMaxLines: 200,
 		},
 		Theme: ThemeConfig{
 			Name: "solarized",

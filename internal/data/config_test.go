@@ -30,6 +30,12 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.Behavior.AutoIntercept {
 		t.Error("expected auto_intercept true")
 	}
+	if !cfg.Behavior.ScreenCapture {
+		t.Error("expected screen_capture true")
+	}
+	if cfg.Behavior.ScreenCaptureMaxLines != 200 {
+		t.Errorf("expected 200 screen_capture_max_lines, got %d", cfg.Behavior.ScreenCaptureMaxLines)
+	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("expected info, got %q", cfg.LogLevel)
 	}

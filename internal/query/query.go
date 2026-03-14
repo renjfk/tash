@@ -32,15 +32,22 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 		"conversation_entries", len(convo.Entries),
 	)
 
-	// Build multi-turn messages from conversation history
-	messages := buildMessages(convo, shellHistory, input, nil)
+	// Inject initial screen context from Zellij (if available)
+	var initialConstraints []string
+	if screenCtx := initialScreenContext(cfg); screenCtx != "" {
+		initialConstraints = append(initialConstraints, screenCtx)
+		slog.Debug("initial screen context injected", "len", len(screenCtx))
+	}
 
-	// Attempt loop: tool calls (history, memory) don't count toward retries.
+	// Build multi-turn messages from conversation history
+	messages := buildMessages(convo, shellHistory, input, initialConstraints)
+
+	// Attempt loop: tool calls (history, memory, screen) don't count toward retries.
 	// Only real failures (API error, parse error, no terminal response) do.
 	// Tool calls are capped at 2 to prevent search loops.
 	const maxToolCalls = 2
 	var lastErr error
-	var constraints []string
+	constraints := append([]string{}, initialConstraints...)
 	failures := 0
 	toolCalls := 0
 	planStep := 0
@@ -131,7 +138,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 		default:
 			slog.Warn("no terminal response", "attempt", attempt)
 			if toolCalls >= maxToolCalls {
-				constraints = append(constraints, "No more history lookups available. Respond with a command or chat based on what you already know.")
+				constraints = append(constraints, "No more tool calls available (history, screen). Respond with a command or chat based on what you already know.")
 			}
 			lastErr = fmt.Errorf("no chat or command in response")
 			failures++
@@ -183,6 +190,12 @@ func handleResponses(
 			constraint := searchContext(cfg, convo, shellHistory, parsed.Filter, parsed.Count)
 			*constraints = append(*constraints, constraint)
 			*retryReason = "Searching history"
+			retry = true
+		} else if parsed.Type == "screen" && !skipToolCalls {
+			slog.Debug("screen request", "lines", parsed.Lines)
+			constraint := captureScreen(cfg, parsed.Lines)
+			*constraints = append(*constraints, constraint)
+			*retryReason = "Reading terminal"
 			retry = true
 		}
 	}
