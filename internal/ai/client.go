@@ -46,10 +46,10 @@ type Response struct {
 
 // TashResponse is the structured JSON response from the AI.
 type TashResponse struct {
-	Type           string   `json:"type"`                      // "command", "chat", "history", "memory", "plan", "screen"
+	Type           string   `json:"type"`                      // "command", "chat", "history", "memory", "plan", "screen", "context"
 	Commands       []string `json:"commands,omitempty"`        // for type "command" or "plan"
 	Message        string   `json:"message,omitempty"`         // explanation, chat text, or memory fact
-	Count          int      `json:"count,omitempty"`           // for type "history": how many entries
+	Count          int      `json:"count,omitempty"`           // for type "history" or "context": how many entries
 	Filter         string   `json:"filter,omitempty"`          // for type "history": grep filter
 	StepsRemaining int      `json:"steps_remaining,omitempty"` // for type "plan": estimated remaining steps
 	Lines          int      `json:"lines,omitempty"`           // for type "screen": how many lines to capture

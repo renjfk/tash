@@ -18,6 +18,7 @@ func TestHasTerminalResponse(t *testing.T) {
 		{"command", []ai.TashResponse{{Type: "command"}}, true},
 		{"plan", []ai.TashResponse{{Type: "plan"}}, true},
 		{"history only", []ai.TashResponse{{Type: "history"}}, false},
+		{"context only", []ai.TashResponse{{Type: "context"}}, false},
 		{"memory only", []ai.TashResponse{{Type: "memory"}}, false},
 		{"empty", nil, false},
 		{"memory then chat", []ai.TashResponse{{Type: "memory"}, {Type: "chat"}}, true},
@@ -112,6 +113,15 @@ func TestBuildSystemPrompt_NoProfile(t *testing.T) {
 	}
 	if strings.Contains(got, "User Profile") {
 		t.Error("should not contain profile section when nil")
+	}
+	if !strings.Contains(got, "--- Session ---") {
+		t.Error("expected session section")
+	}
+	if !strings.Contains(got, "tash version:") {
+		t.Error("expected version in session section")
+	}
+	if !strings.Contains(got, "Current time:") {
+		t.Error("expected current time in session section")
 	}
 }
 

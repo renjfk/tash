@@ -44,7 +44,10 @@ type ModelConfig struct {
 // BehaviorConfig holds runtime behavior settings.
 type BehaviorConfig struct {
 	MaxRetries            int  `yaml:"max_retries"`
+	MaxToolCalls          int  `yaml:"max_tool_calls"`
 	MaxMemories           int  `yaml:"max_memories"`
+	MaxContext            int  `yaml:"max_context"`
+	MaxHistoryResults     int  `yaml:"max_history_results"`
 	AutoIntercept         bool `yaml:"auto_intercept"`
 	ScreenCapture         bool `yaml:"screen_capture"`
 	ScreenCaptureMaxLines int  `yaml:"screen_capture_max_lines"`
@@ -67,7 +70,10 @@ func DefaultConfig() *Config {
 		},
 		Behavior: BehaviorConfig{
 			MaxRetries:            3,
+			MaxToolCalls:          3,
 			MaxMemories:           50,
+			MaxContext:            500,
+			MaxHistoryResults:     200,
 			AutoIntercept:         true,
 			ScreenCapture:         true,
 			ScreenCaptureMaxLines: 200,
@@ -80,7 +86,7 @@ func DefaultConfig() *Config {
 		},
 		LogLevel: "info",
 		Profile: ProfileConfig{
-			RebuildInterval: 3600,
+			RebuildInterval: 86400,
 			HistoryPath:     "~/.local/share/fish/fish_history",
 		},
 	}
@@ -131,8 +137,17 @@ func (c *Config) validate() {
 	if c.Behavior.MaxRetries <= 0 {
 		c.Behavior.MaxRetries = def.Behavior.MaxRetries
 	}
+	if c.Behavior.MaxToolCalls <= 0 {
+		c.Behavior.MaxToolCalls = def.Behavior.MaxToolCalls
+	}
 	if c.Behavior.MaxMemories <= 0 {
 		c.Behavior.MaxMemories = def.Behavior.MaxMemories
+	}
+	if c.Behavior.MaxContext <= 0 {
+		c.Behavior.MaxContext = def.Behavior.MaxContext
+	}
+	if c.Behavior.MaxHistoryResults <= 0 {
+		c.Behavior.MaxHistoryResults = def.Behavior.MaxHistoryResults
 	}
 	if c.Behavior.ScreenCaptureMaxLines <= 0 {
 		c.Behavior.ScreenCaptureMaxLines = def.Behavior.ScreenCaptureMaxLines
@@ -271,7 +286,10 @@ func buildConfigComments() map[string]fieldComment {
 			comment: "runtime behavior settings",
 			children: map[string]fieldComment{
 				"max_retries":              {comment: "retry attempts on API or parse failures"},
+				"max_tool_calls":           {comment: "maximum tool calls (history, context, screen) per query"},
 				"max_memories":             {comment: "maximum durable memories kept in conversation history"},
+				"max_context":              {comment: "maximum conversation entries AI can load via context requests (scroll buffer)"},
+				"max_history_results":      {comment: "maximum results returned from shell history searches"},
 				"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
 				"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},
 				"screen_capture_max_lines": {comment: "maximum lines the AI can request from terminal scrollback"},

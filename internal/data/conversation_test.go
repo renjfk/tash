@@ -133,12 +133,12 @@ func TestMemories_Empty(t *testing.T) {
 func TestFormatForAI(t *testing.T) {
 	c := NewConversation()
 	c.Entries = []Entry{
-		{Type: "query", Content: "show files"},
-		{Type: "command", Content: "ls -la", Action: "accept"},
-		{Type: "shell", Content: "make build", ExitCode: 2},
-		{Type: "chat", Content: "Here's the info"},
-		{Type: "memory", Content: "User likes Go"},
-		{Type: "command", Content: "skipped cmd", Action: "skip"},
+		{Type: "query", Content: "show files", Time: 1700000001},
+		{Type: "command", Content: "ls -la", Action: "accept", Time: 1700000002},
+		{Type: "shell", Content: "make build", ExitCode: 2, Time: 1700000003},
+		{Type: "chat", Content: "Here's the info", Time: 1700000004},
+		{Type: "memory", Content: "User likes Go", Time: 1700000005},
+		{Type: "command", Content: "skipped cmd", Action: "skip", Time: 1700000006},
 	}
 
 	msgs := c.FormatForAI()
@@ -149,14 +149,22 @@ func TestFormatForAI(t *testing.T) {
 		t.Fatalf("expected 4 messages, got %d", len(msgs))
 	}
 
-	if msgs[0].Role != "user" || msgs[0].Content != "show files" {
+	if msgs[0].Role != "user" || !strings.Contains(msgs[0].Content, "show files") {
 		t.Errorf("msg 0: expected user/show files, got %s/%s", msgs[0].Role, msgs[0].Content)
+	}
+	// User messages should include timestamps
+	if !strings.Contains(msgs[0].Content, "[2023-11-") {
+		t.Errorf("msg 0: expected timestamp prefix, got %s", msgs[0].Content)
 	}
 	if msgs[1].Role != "assistant" || msgs[1].Content != "ls -la" {
 		t.Errorf("msg 1: expected assistant/ls -la, got %s/%s", msgs[1].Role, msgs[1].Content)
 	}
 	if msgs[2].Role != "user" || !strings.Contains(msgs[2].Content, "exit 2") {
 		t.Errorf("msg 2: expected user with exit code, got %s/%s", msgs[2].Role, msgs[2].Content)
+	}
+	// Failed shell commands should include timestamps
+	if !strings.Contains(msgs[2].Content, "[2023-11-") {
+		t.Errorf("msg 2: expected timestamp prefix, got %s", msgs[2].Content)
 	}
 	if msgs[3].Role != "assistant" || msgs[3].Content != "Here's the info" {
 		t.Errorf("msg 3: expected assistant/info, got %s/%s", msgs[3].Role, msgs[3].Content)
@@ -526,5 +534,94 @@ func TestReadLinesReverse_EmptyFile(t *testing.T) {
 	}
 	if len(lines) != 0 {
 		t.Errorf("expected 0 lines, got %d", len(lines))
+	}
+}
+
+func TestLoadMoreContext(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write 20 entries
+	var b strings.Builder
+	for i := 0; i < 20; i++ {
+		data, _ := json.Marshal(Entry{Type: "query", Content: "q" + string(rune('A'+i)), Time: int64(i + 1)})
+		b.Write(data)
+		b.WriteByte('\n')
+	}
+	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
+
+	// Load with small maxEntries initially (default loads maxEntries+maxMemories=300, but we only have 20)
+	convo, err := LoadConversation(dir, 5)
+	if err != nil {
+		t.Fatalf("LoadConversation: %v", err)
+	}
+
+	initialCount := len(convo.Entries)
+
+	// Load more context with a generous maxTotal
+	loaded, err := convo.LoadMoreContext(100, 1000)
+	if err != nil {
+		t.Fatalf("LoadMoreContext: %v", err)
+	}
+
+	// Since we only have 20 entries total and initial load already got them all,
+	// loaded should be 0 (or the difference if any)
+	_ = loaded
+	if len(convo.Entries) < initialCount {
+		t.Errorf("should not have fewer entries after loading more context")
+	}
+}
+
+func TestLoadMoreContext_NoDataDir(t *testing.T) {
+	convo := NewConversation()
+	_, err := convo.LoadMoreContext(10, 100)
+	if err == nil {
+		t.Error("expected error when no data directory set")
+	}
+}
+
+func TestLoadMoreContext_MaxTotalCap(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write 50 entries
+	var b strings.Builder
+	for i := 0; i < 50; i++ {
+		data, _ := json.Marshal(Entry{Type: "query", Content: "q", Time: int64(i + 1)})
+		b.Write(data)
+		b.WriteByte('\n')
+	}
+	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
+
+	convo, err := LoadConversation(dir, 5)
+	if err != nil {
+		t.Fatalf("LoadConversation: %v", err)
+	}
+
+	// Try to load more but maxTotal is same as already loaded — should load 0
+	loaded, err := convo.LoadMoreContext(100, convo.maxLoaded)
+	if err != nil {
+		t.Fatalf("LoadMoreContext: %v", err)
+	}
+	if loaded != 0 {
+		t.Errorf("expected 0 loaded when at max, got %d", loaded)
+	}
+}
+
+func TestFormatTimestamp(t *testing.T) {
+	tests := []struct {
+		name string
+		unix int64
+		want string
+	}{
+		{"zero", 0, "unknown"},
+		{"valid", 1700000001, "2023-11-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatTimestamp(tt.unix)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("FormatTimestamp(%d) = %q, want contains %q", tt.unix, got, tt.want)
+			}
+		})
 	}
 }

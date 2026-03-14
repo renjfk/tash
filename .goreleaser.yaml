@@ -15,7 +15,7 @@ builds:
       - arm64
     main: ./cmd/tash
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w -X main.version={{.Version}} -X 'main.buildTime={{.Date}}'
 
 archives:
   - formats: ['binary']

@@ -101,9 +101,14 @@ func tickInit(cfg *data.Config) (*InitStats, error) {
 	}
 	slog.Debug("history analysis complete", "total_entries", stats.TotalEntries)
 
+	// Only send tools the user has actually used — avoids sending 2000+ PATH
+	// binaries when the AI only needs the ~50 the user actively uses.
+	usedTools := filterUsedTools(binaries, stats.CommandFreq)
+	slog.Debug("filtered tools", "used", len(usedTools), "total", len(binaries))
+
 	input := &RebuildInput{
 		HistoryStats:   stats.FormatStats(),
-		InstalledTools: binaries,
+		InstalledTools: usedTools,
 		IsIncremental:  false,
 	}
 
@@ -169,12 +174,12 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 		currentContent = currentProfile.Content
 	}
 
-	binaries := scanPATH()
-
+	// Skip PATH scan for incremental rebuilds — the current profile already
+	// has the tools list and history stats show what changed. This saves the
+	// bulk of the prompt tokens (2000+ binaries → 0).
 	input := &RebuildInput{
 		CurrentProfile: currentContent,
 		HistoryStats:   stats.FormatStats(),
-		InstalledTools: binaries,
 		IsIncremental:  true,
 	}
 
@@ -310,6 +315,17 @@ func writePIDFile(dataDir string) {
 
 func removePIDFile(dataDir string) {
 	_ = os.Remove(filepath.Join(dataDir, pidFile))
+}
+
+// filterUsedTools returns only binaries that appear in the command frequency map.
+func filterUsedTools(binaries []string, commandFreq map[string]int) []string {
+	var used []string
+	for _, b := range binaries {
+		if commandFreq[b] > 0 {
+			used = append(used, b)
+		}
+	}
+	return used
 }
 
 // scanPATH scans all directories in PATH and returns a deduplicated list of available binaries.

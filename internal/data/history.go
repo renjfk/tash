@@ -101,14 +101,18 @@ func AnalyzeHistory(historyPath string) (*HistoryStats, error) {
 }
 
 // SearchHistory finds history entries matching a filter (regex or substring) and
-// returns the last count commands. If filter is empty, returns the last count entries.
-// Streams the file line-by-line to avoid allocating the full history into memory.
-func SearchHistory(historyPath string, filter string, count int) []string {
+// returns the last count entries. If filter is empty, returns the last count entries.
+// maxResults caps the count to prevent unbounded reads. Streams the file line-by-line
+// to avoid allocating the full history into memory.
+func SearchHistory(historyPath string, filter string, count int, maxResults int) []HistoryEntry {
+	if maxResults <= 0 {
+		maxResults = 200
+	}
 	if count <= 0 {
 		count = 50
 	}
-	if count > 200 {
-		count = 200
+	if count > maxResults {
+		count = maxResults
 	}
 
 	f, err := os.Open(historyPath)
@@ -117,8 +121,8 @@ func SearchHistory(historyPath string, filter string, count int) []string {
 	}
 	defer f.Close() //nolint:errcheck
 
-	// Ring buffer: keep only the last `count` matching commands
-	ring := make([]string, count)
+	// Ring buffer: keep only the last `count` matching entries
+	ring := make([]HistoryEntry, count)
 	total := 0
 
 	var re *regexp.Regexp
@@ -126,25 +130,35 @@ func SearchHistory(historyPath string, filter string, count int) []string {
 		re, _ = regexp.Compile(filter)
 	}
 
+	var current HistoryEntry
+	hasCmd := false
+
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.HasPrefix(line, "- cmd: ") {
+
+		if strings.HasPrefix(line, "- cmd: ") {
+			// Flush previous entry if it matched
+			if hasCmd {
+				if matchesFilter(current.Command, filter, re) {
+					ring[total%count] = current
+					total++
+				}
+			}
+			current = HistoryEntry{Command: line[7:]}
+			hasCmd = true
 			continue
 		}
-		cmd := line[7:]
 
-		if filter != "" {
-			if re != nil {
-				if !re.MatchString(cmd) {
-					continue
-				}
-			} else if !strings.Contains(cmd, filter) {
-				continue
-			}
+		if hasCmd && strings.HasPrefix(line, "  when: ") {
+			current.Timestamp, _ = strconv.ParseInt(strings.TrimSpace(line[8:]), 10, 64)
+			continue
 		}
+	}
 
-		ring[total%count] = cmd
+	// Flush last entry
+	if hasCmd && matchesFilter(current.Command, filter, re) {
+		ring[total%count] = current
 		total++
 	}
 
@@ -157,10 +171,33 @@ func SearchHistory(historyPath string, filter string, count int) []string {
 	if n > count {
 		n = count
 	}
-	result := make([]string, n)
+	result := make([]HistoryEntry, n)
 	start := total - n
 	for i := 0; i < n; i++ {
 		result[i] = ring[(start+i)%count]
+	}
+	return result
+}
+
+func matchesFilter(cmd string, filter string, re *regexp.Regexp) bool {
+	if filter == "" {
+		return true
+	}
+	if re != nil {
+		return re.MatchString(cmd)
+	}
+	return strings.Contains(cmd, filter)
+}
+
+// FormatHistory formats history entries with timestamps for AI consumption.
+func FormatHistory(entries []HistoryEntry) []string {
+	result := make([]string, len(entries))
+	for i, e := range entries {
+		if e.Timestamp > 0 {
+			result[i] = "[" + FormatTimestamp(e.Timestamp) + "] " + e.Command
+		} else {
+			result[i] = e.Command
+		}
 	}
 	return result
 }

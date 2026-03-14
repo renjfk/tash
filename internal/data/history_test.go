@@ -116,7 +116,7 @@ func TestAnalyzeHistory(t *testing.T) {
 func TestSearchHistory_NoFilter(t *testing.T) {
 	path := writeSampleHistory(t)
 
-	results := SearchHistory(path, "", 10)
+	results := SearchHistory(path, "", 10, 200)
 	if len(results) != 5 {
 		t.Errorf("expected 5 results, got %d", len(results))
 	}
@@ -125,32 +125,81 @@ func TestSearchHistory_NoFilter(t *testing.T) {
 func TestSearchHistory_SubstringFilter(t *testing.T) {
 	path := writeSampleHistory(t)
 
-	results := SearchHistory(path, "docker", 10)
+	results := SearchHistory(path, "docker", 10, 200)
 	if len(results) != 1 {
 		t.Fatalf("expected 1 docker result, got %d", len(results))
 	}
-	if results[0] != "docker ps -a" {
-		t.Errorf("expected docker ps -a, got %q", results[0])
+	if results[0].Command != "docker ps -a" {
+		t.Errorf("expected docker ps -a, got %q", results[0].Command)
+	}
+	if results[0].Timestamp != 1700000003 {
+		t.Errorf("expected timestamp 1700000003, got %d", results[0].Timestamp)
 	}
 }
 
 func TestSearchHistory_CountLimit(t *testing.T) {
 	path := writeSampleHistory(t)
 
-	results := SearchHistory(path, "", 2)
+	results := SearchHistory(path, "", 2, 200)
 	if len(results) != 2 {
 		t.Errorf("expected 2 results, got %d", len(results))
 	}
 	// Should be the last 2 entries
-	if results[1] != "kubectl get pods -n default" {
-		t.Errorf("expected last entry, got %q", results[1])
+	if results[1].Command != "kubectl get pods -n default" {
+		t.Errorf("expected last entry, got %q", results[1].Command)
+	}
+}
+
+func TestSearchHistory_MaxResultsCap(t *testing.T) {
+	path := writeSampleHistory(t)
+
+	// Request count 10 but maxResults is 3 — should be capped to 3
+	results := SearchHistory(path, "", 10, 3)
+	if len(results) != 3 {
+		t.Errorf("expected 3 results (capped by maxResults), got %d", len(results))
 	}
 }
 
 func TestSearchHistory_MissingFile(t *testing.T) {
-	results := SearchHistory("/nonexistent/path", "git", 10)
+	results := SearchHistory("/nonexistent/path", "git", 10, 200)
 	if results != nil {
 		t.Errorf("expected nil for missing file, got %v", results)
+	}
+}
+
+func TestFormatHistory(t *testing.T) {
+	entries := []HistoryEntry{
+		{Command: "git status", Timestamp: 1700000001},
+		{Command: "ls", Timestamp: 0},
+		{Command: "make build", Timestamp: 1700000005},
+	}
+
+	formatted := FormatHistory(entries)
+
+	if len(formatted) != 3 {
+		t.Fatalf("expected 3 formatted entries, got %d", len(formatted))
+	}
+
+	// Entry with timestamp should have [timestamp] prefix
+	if !strings.Contains(formatted[0], "[") || !strings.Contains(formatted[0], "git status") {
+		t.Errorf("expected timestamped entry, got %q", formatted[0])
+	}
+
+	// Entry with zero timestamp should be bare command
+	if formatted[1] != "ls" {
+		t.Errorf("expected bare command for zero timestamp, got %q", formatted[1])
+	}
+
+	// Entry with timestamp should have [timestamp] prefix
+	if !strings.Contains(formatted[2], "[") || !strings.Contains(formatted[2], "make build") {
+		t.Errorf("expected timestamped entry, got %q", formatted[2])
+	}
+}
+
+func TestFormatHistory_Empty(t *testing.T) {
+	formatted := FormatHistory(nil)
+	if len(formatted) != 0 {
+		t.Errorf("expected empty result, got %d entries", len(formatted))
 	}
 }
 

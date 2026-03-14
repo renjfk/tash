@@ -41,7 +41,9 @@ func NewRequestID() string {
 type Conversation struct {
 	Entries     []Entry
 	session     string
+	dataDir     string // for loading more context on demand
 	maxMemories int
+	maxLoaded   int // total lines loaded from disk so far
 	savedCount  int // number of entries already persisted on disk
 }
 
@@ -67,9 +69,10 @@ func LoadConversation(dataDir string, maxMemories int) (*Conversation, error) {
 	if maxMemories <= 0 {
 		maxMemories = 50
 	}
-	state := &Conversation{maxMemories: maxMemories}
+	state := &Conversation{maxMemories: maxMemories, dataDir: dataDir}
 
-	lines, err := readLinesReverse(path, maxEntries+maxMemories)
+	loadCount := maxEntries + maxMemories
+	lines, err := readLinesReverse(path, loadCount)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +85,60 @@ func LoadConversation(dataDir string, maxMemories int) (*Conversation, error) {
 		state.Entries = append(state.Entries, e)
 	}
 
+	state.maxLoaded = loadCount
 	state.trim()
 	state.savedCount = len(state.Entries)
 	return state, nil
+}
+
+// LoadMoreContext loads additional older conversation entries from disk.
+// Returns the number of new entries loaded. The maxTotal parameter caps the
+// total conversation size to prevent unbounded growth (scroll buffer).
+func (s *Conversation) LoadMoreContext(count int, maxTotal int) (int, error) {
+	if s.dataDir == "" {
+		return 0, fmt.Errorf("no data directory set")
+	}
+
+	path := filepath.Join(s.dataDir, stateFile)
+
+	// Load more lines than currently loaded
+	newLoadCount := s.maxLoaded + count
+	if maxTotal > 0 && newLoadCount > maxTotal {
+		newLoadCount = maxTotal
+	}
+	if newLoadCount <= s.maxLoaded {
+		return 0, nil // already at max
+	}
+
+	lines, err := readLinesReverse(path, newLoadCount)
+	if err != nil {
+		return 0, fmt.Errorf("load more context: %w", err)
+	}
+
+	// Parse all loaded lines
+	var allEntries []Entry
+	for _, line := range lines {
+		var e Entry
+		if err := json.Unmarshal(line, &e); err != nil {
+			continue
+		}
+		allEntries = append(allEntries, e)
+	}
+
+	// Find entries added during this session (after savedCount)
+	var newSessionEntries []Entry
+	if s.savedCount < len(s.Entries) {
+		newSessionEntries = s.Entries[s.savedCount:]
+	}
+
+	// Replace entries with the expanded set, then re-append session entries
+	s.Entries = allEntries
+	s.maxLoaded = newLoadCount
+	oldLen := len(s.Entries)
+	s.Entries = append(s.Entries, newSessionEntries...)
+	s.savedCount = oldLen
+
+	return len(allEntries) - (oldLen - len(newSessionEntries)), nil
 }
 
 // readLinesReverse reads up to maxLines non-empty lines from the end of a file.
@@ -257,67 +311,83 @@ func AppendEntry(dataDir string, e Entry) error {
 // AddMemory stores a durable fact the LLM decided is worth remembering.
 // Oldest memories are dropped when the cap is exceeded.
 func (s *Conversation) AddMemory(content string) {
-	s.Entries = append(s.Entries, Entry{
-		Type:    "memory",
-		Content: content,
-		Session: s.session,
-		Time:    time.Now().Unix(),
-	})
+	s.Entries = append(
+		s.Entries, Entry{
+			Type:    "memory",
+			Content: content,
+			Session: s.session,
+			Time:    time.Now().Unix(),
+		},
+	)
 	s.trimMemories()
 }
 
 // AddShellCommand records a command the user ran in the shell.
 func (s *Conversation) AddShellCommand(command string, exitCode int) {
-	s.Entries = append(s.Entries, Entry{
-		Type:     "shell",
-		Content:  command,
-		Session:  s.session,
-		ExitCode: exitCode,
-		Time:     time.Now().Unix(),
-	})
+	s.Entries = append(
+		s.Entries, Entry{
+			Type:     "shell",
+			Content:  command,
+			Session:  s.session,
+			ExitCode: exitCode,
+			Time:     time.Now().Unix(),
+		},
+	)
 	s.trim()
 }
 
 // AddQuery records a tash query from the user.
 func (s *Conversation) AddQuery(query string) {
-	s.Entries = append(s.Entries, Entry{
-		Type:    "query",
-		Content: query,
-		Session: s.session,
-		Time:    time.Now().Unix(),
-	})
+	s.Entries = append(
+		s.Entries, Entry{
+			Type:    "query",
+			Content: query,
+			Session: s.session,
+			Time:    time.Now().Unix(),
+		},
+	)
 	s.trim()
 }
 
 // AddCommandResponse records a command suggestion from tash with the user's action.
 // action is "accept" or "skip". requestID links entries from the same AI response.
 // Token usage should only be set on the first entry per request.
-func (s *Conversation) AddCommandResponse(command string, action string, requestID string, promptTokens int, completionTokens int) {
-	s.Entries = append(s.Entries, Entry{
-		Type:             "command",
-		Content:          command,
-		Action:           action,
-		RequestID:        requestID,
-		PromptTokens:     promptTokens,
-		CompletionTokens: completionTokens,
-		Session:          s.session,
-		Time:             time.Now().Unix(),
-	})
+func (s *Conversation) AddCommandResponse(
+	command string,
+	action string,
+	requestID string,
+	promptTokens int,
+	completionTokens int,
+) {
+	s.Entries = append(
+		s.Entries, Entry{
+			Type:             "command",
+			Content:          command,
+			Action:           action,
+			RequestID:        requestID,
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			Session:          s.session,
+			Time:             time.Now().Unix(),
+		},
+	)
 	s.trim()
 }
 
 // AddChatResponse records a chat message from tash.
 // requestID links entries from the same AI response.
 func (s *Conversation) AddChatResponse(message string, requestID string, promptTokens int, completionTokens int) {
-	s.Entries = append(s.Entries, Entry{
-		Type:             "chat",
-		Content:          message,
-		RequestID:        requestID,
-		PromptTokens:     promptTokens,
-		CompletionTokens: completionTokens,
-		Session:          s.session,
-		Time:             time.Now().Unix(),
-	})
+	s.Entries = append(
+		s.Entries, Entry{
+			Type:             "chat",
+			Content:          message,
+			RequestID:        requestID,
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			Session:          s.session,
+			Time:             time.Now().Unix(),
+		},
+	)
 	s.trim()
 }
 
@@ -325,6 +395,7 @@ func (s *Conversation) AddChatResponse(message string, requestID string, promptT
 type ShellCommand struct {
 	Command  string
 	ExitCode int
+	Time     int64
 }
 
 // RecentShellCommands returns the last N shell commands with exit codes.
@@ -351,10 +422,13 @@ func (s *Conversation) RecentShellCommands(n int) []ShellCommand {
 		if queries[e.Content] || queries[stripShellEscapes(e.Content)] {
 			continue
 		}
-		cmds = append(cmds, ShellCommand{
-			Command:  e.Content,
-			ExitCode: e.ExitCode,
-		})
+		cmds = append(
+			cmds, ShellCommand{
+				Command:  e.Content,
+				ExitCode: e.ExitCode,
+				Time:     e.Time,
+			},
+		)
 	}
 	for i, j := 0, len(cmds)-1; i < j; i, j = i+1, j-1 {
 		cmds[i], cmds[j] = cmds[j], cmds[i]
@@ -390,6 +464,7 @@ func stripShellEscapes(s string) string {
 // the model with rejected suggestions.
 // Failed shell commands (non-zero exit) are included as user context so
 // the AI knows which commands didn't work.
+// Each entry includes a timestamp prefix so the AI is aware of when events occurred.
 func (s *Conversation) FormatForAI() []AIMessage {
 	// Build set of query contents to skip matching shell entries.
 	// Store both raw and shell-unescaped forms so that fish-escaped
@@ -405,19 +480,22 @@ func (s *Conversation) FormatForAI() []AIMessage {
 	var messages []AIMessage
 
 	for _, e := range s.Entries {
+		ts := FormatTimestamp(e.Time)
 		switch e.Type {
 		case "memory":
 			continue
 		case "shell":
 			// Include failed commands (non-zero exit) that aren't tash queries
 			if e.ExitCode != 0 && !queries[e.Content] && !queries[stripShellEscapes(e.Content)] {
-				messages = append(messages, AIMessage{
-					Role:    "user",
-					Content: fmt.Sprintf("$ %s  # exit %d", e.Content, e.ExitCode),
-				})
+				messages = append(
+					messages, AIMessage{
+						Role:    "user",
+						Content: fmt.Sprintf("[%s] $ %s  # exit %d", ts, e.Content, e.ExitCode),
+					},
+				)
 			}
 		case "query":
-			messages = append(messages, AIMessage{Role: "user", Content: e.Content})
+			messages = append(messages, AIMessage{Role: "user", Content: fmt.Sprintf("[%s] %s", ts, e.Content)})
 		case "command":
 			if e.Action == "accept" || e.Action == "" {
 				messages = append(messages, AIMessage{Role: "assistant", Content: e.Content})
@@ -428,6 +506,15 @@ func (s *Conversation) FormatForAI() []AIMessage {
 	}
 
 	return messages
+}
+
+// FormatTimestamp converts a unix timestamp to a human-readable format.
+// Returns "unknown" for zero timestamps.
+func FormatTimestamp(unix int64) string {
+	if unix == 0 {
+		return "unknown"
+	}
+	return time.Unix(unix, 0).Format("2006-01-02T15:04:05")
 }
 
 // AIMessage is a role+content pair for multi-turn conversation.

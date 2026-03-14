@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/renjfk/tash/internal/ai"
 	"github.com/renjfk/tash/internal/data"
 	"github.com/renjfk/tash/internal/tui"
 )
+
+// Version is set by the main package at startup to inject the build version into AI context.
+var Version = "dev"
 
 // Run executes the query flow. The AI decides whether to respond with
 // commands or chat text. Returns the command (if any) for fish to place in the command line.
@@ -42,10 +46,10 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	// Build multi-turn messages from conversation history
 	messages := buildMessages(convo, shellHistory, input, initialConstraints)
 
-	// Attempt loop: tool calls (history, memory, screen) don't count toward retries.
+	// Attempt loop: tool calls (history, context, screen) don't count toward retries.
 	// Only real failures (API error, parse error, no terminal response) do.
-	// Tool calls are capped at 2 to prevent search loops.
-	const maxToolCalls = 2
+	// Tool calls are capped to prevent search loops.
+	maxToolCalls := cfg.Behavior.MaxToolCalls
 	var lastErr error
 	constraints := append([]string{}, initialConstraints...)
 	failures := 0
@@ -167,6 +171,46 @@ func hasTerminalResponse(responses []ai.TashResponse) bool {
 	return false
 }
 
+// processSideEffects handles tool-call responses (memory, history, context, screen)
+// and returns true if a retry is needed.
+func processSideEffects(
+	responses []ai.TashResponse,
+	cfg *data.Config,
+	convo *data.Conversation,
+	shellHistory []data.ShellCommand,
+	constraints *[]string,
+	skipToolCalls bool,
+	retryReason *string,
+) bool {
+	retry := false
+	for _, parsed := range responses {
+		switch {
+		case parsed.Type == "memory" && parsed.Message != "":
+			slog.Debug("storing memory", "content", parsed.Message)
+			convo.AddMemory(parsed.Message)
+		case parsed.Type == "history" && !skipToolCalls:
+			slog.Debug("history request", "filter", parsed.Filter, "count", parsed.Count)
+			constraint := searchContext(cfg, convo, shellHistory, parsed.Filter, parsed.Count)
+			*constraints = append(*constraints, constraint)
+			*retryReason = "Searching history"
+			retry = true
+		case parsed.Type == "context" && !skipToolCalls:
+			slog.Debug("context request", "count", parsed.Count)
+			constraint := loadMoreContext(cfg, convo, parsed.Count)
+			*constraints = append(*constraints, constraint)
+			*retryReason = "Loading context"
+			retry = true
+		case parsed.Type == "screen" && !skipToolCalls:
+			slog.Debug("screen request", "lines", parsed.Lines)
+			constraint := captureScreen(cfg, parsed.Lines)
+			*constraints = append(*constraints, constraint)
+			*retryReason = "Reading terminal"
+			retry = true
+		}
+	}
+	return retry
+}
+
 func handleResponses(
 	responses []ai.TashResponse,
 	cfg *data.Config,
@@ -180,25 +224,7 @@ func handleResponses(
 	usage ai.Usage,
 ) (string, int) {
 	// Process side-effects first
-	retry := false
-	for _, parsed := range responses {
-		if parsed.Type == "memory" && parsed.Message != "" {
-			slog.Debug("storing memory", "content", parsed.Message)
-			convo.AddMemory(parsed.Message)
-		} else if parsed.Type == "history" && !skipToolCalls {
-			slog.Debug("history request", "filter", parsed.Filter, "count", parsed.Count)
-			constraint := searchContext(cfg, convo, shellHistory, parsed.Filter, parsed.Count)
-			*constraints = append(*constraints, constraint)
-			*retryReason = "Searching history"
-			retry = true
-		} else if parsed.Type == "screen" && !skipToolCalls {
-			slog.Debug("screen request", "lines", parsed.Lines)
-			constraint := captureScreen(cfg, parsed.Lines)
-			*constraints = append(*constraints, constraint)
-			*retryReason = "Reading terminal"
-			retry = true
-		}
-	}
+	retry := processSideEffects(responses, cfg, convo, shellHistory, constraints, skipToolCalls, retryReason)
 
 	// Find the first terminal response
 	for _, parsed := range responses {
@@ -248,14 +274,44 @@ func handleResponses(
 	return "", actionNothing
 }
 
+// loadMoreContext loads additional older conversation entries and returns them
+// formatted as a constraint string for the AI.
+func loadMoreContext(cfg *data.Config, convo *data.Conversation, count int) string {
+	if count <= 0 {
+		count = 50
+	}
+
+	loaded, err := convo.LoadMoreContext(count, cfg.Behavior.MaxContext)
+	if err != nil {
+		slog.Warn("load more context", "error", err)
+		return "Could not load additional context"
+	}
+
+	if loaded == 0 {
+		return "No additional conversation history available"
+	}
+
+	// Re-format older entries as context
+	messages := convo.FormatForAI()
+	if len(messages) == 0 {
+		return "No additional conversation history available"
+	}
+
+	// Return a summary — the full entries are now in the conversation and will
+	// appear in the next buildMessages call via FormatForAI()
+	return fmt.Sprintf("Loaded %d additional conversation entries (now %d total entries in context)", loaded, len(convo.Entries))
+}
+
 // searchContext merges results from shell history and conversation entries,
 // deduplicating against each other and against what's already in the prompt.
 func searchContext(cfg *data.Config, convo *data.Conversation, shellHistory []data.ShellCommand, filter string, count int) string {
-	historyResults := data.SearchHistory(cfg.ResolvedHistoryPath(), filter, count)
+	historyEntries := data.SearchHistory(cfg.ResolvedHistoryPath(), filter, count, cfg.Behavior.MaxHistoryResults)
+	historyFormatted := data.FormatHistory(historyEntries)
 	convoResults := convo.Search(filter, count)
 
 	// Seed seen set with content already present in prompt context:
-	// shellHistory (recent commands) and conversation turns (query/command/chat)
+	// shellHistory (recent commands) and conversation turns (query/command/chat).
+	// Dedup by raw command to avoid duplicates regardless of timestamp formatting.
 	seen := make(map[string]bool)
 	for _, cmd := range shellHistory {
 		seen[cmd.Command] = true
@@ -274,10 +330,10 @@ func searchContext(cfg *data.Config, convo *data.Conversation, shellHistory []da
 			extra = append(extra, c)
 		}
 	}
-	for _, h := range historyResults {
-		if !seen[h] {
-			seen[h] = true
-			extra = append(extra, h)
+	for i, entry := range historyEntries {
+		if !seen[entry.Command] {
+			seen[entry.Command] = true
+			extra = append(extra, historyFormatted[i])
 		}
 	}
 
@@ -331,14 +387,19 @@ func buildSystemPrompt(prof *data.Profile, convo *data.Conversation) string {
 
 	b.WriteString(ai.SystemPrompt)
 
+	b.WriteString("\n\n--- Session ---\n")
+	fmt.Fprintf(&b, "tash version: %s\n", Version)
+	now := time.Now()
+	fmt.Fprintf(&b, "Current time: %s (%s)\n", data.FormatTimestamp(now.Unix()), now.Format("MST"))
+
 	if prof != nil {
-		b.WriteString("\n\n--- User Profile ---\n")
+		b.WriteString("\n--- User Profile ---\n")
 		b.WriteString(prof.Content)
 	}
 
 	memories := convo.Memories()
 	if memories != "" {
-		b.WriteString("\n\n--- Memories ---\n")
+		b.WriteString("\n--- Memories ---\n")
 		b.WriteString("Things you've learned about the user from past conversations:\n")
 		b.WriteString(memories)
 	}

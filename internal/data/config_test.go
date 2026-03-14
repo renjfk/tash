@@ -27,6 +27,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Behavior.MaxRetries != 3 {
 		t.Errorf("expected 3 retries, got %d", cfg.Behavior.MaxRetries)
 	}
+	if cfg.Behavior.MaxToolCalls != 3 {
+		t.Errorf("expected 3 max_tool_calls, got %d", cfg.Behavior.MaxToolCalls)
+	}
 	if cfg.Behavior.MaxMemories != 50 {
 		t.Errorf("expected 50 memories, got %d", cfg.Behavior.MaxMemories)
 	}
@@ -36,14 +39,20 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.Behavior.ScreenCapture {
 		t.Error("expected screen_capture true")
 	}
+	if cfg.Behavior.MaxContext != 500 {
+		t.Errorf("expected 500 max_context, got %d", cfg.Behavior.MaxContext)
+	}
+	if cfg.Behavior.MaxHistoryResults != 200 {
+		t.Errorf("expected 200 max_history_results, got %d", cfg.Behavior.MaxHistoryResults)
+	}
 	if cfg.Behavior.ScreenCaptureMaxLines != 200 {
 		t.Errorf("expected 200 screen_capture_max_lines, got %d", cfg.Behavior.ScreenCaptureMaxLines)
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("expected info, got %q", cfg.LogLevel)
 	}
-	if cfg.Profile.RebuildInterval != 3600 {
-		t.Errorf("expected 3600, got %d", cfg.Profile.RebuildInterval)
+	if cfg.Profile.RebuildInterval != 86400 {
+		t.Errorf("expected 86400, got %d", cfg.Profile.RebuildInterval)
 	}
 	if cfg.Terminal.ASCII {
 		t.Error("expected terminal.ascii false by default")
@@ -414,7 +423,10 @@ func TestValidate_NegativeInts(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Model.MaxTokens = -1
 	cfg.Behavior.MaxRetries = 0
+	cfg.Behavior.MaxToolCalls = -1
 	cfg.Behavior.MaxMemories = -5
+	cfg.Behavior.MaxContext = 0
+	cfg.Behavior.MaxHistoryResults = -1
 	cfg.Behavior.ScreenCaptureMaxLines = 0
 	cfg.Profile.RebuildInterval = -100
 	cfg.validate()
@@ -426,8 +438,17 @@ func TestValidate_NegativeInts(t *testing.T) {
 	if cfg.Behavior.MaxRetries != def.Behavior.MaxRetries {
 		t.Errorf("max_retries: want %d, got %d", def.Behavior.MaxRetries, cfg.Behavior.MaxRetries)
 	}
+	if cfg.Behavior.MaxToolCalls != def.Behavior.MaxToolCalls {
+		t.Errorf("max_tool_calls: want %d, got %d", def.Behavior.MaxToolCalls, cfg.Behavior.MaxToolCalls)
+	}
 	if cfg.Behavior.MaxMemories != def.Behavior.MaxMemories {
 		t.Errorf("max_memories: want %d, got %d", def.Behavior.MaxMemories, cfg.Behavior.MaxMemories)
+	}
+	if cfg.Behavior.MaxContext != def.Behavior.MaxContext {
+		t.Errorf("max_context: want %d, got %d", def.Behavior.MaxContext, cfg.Behavior.MaxContext)
+	}
+	if cfg.Behavior.MaxHistoryResults != def.Behavior.MaxHistoryResults {
+		t.Errorf("max_history_results: want %d, got %d", def.Behavior.MaxHistoryResults, cfg.Behavior.MaxHistoryResults)
 	}
 	if cfg.Behavior.ScreenCaptureMaxLines != def.Behavior.ScreenCaptureMaxLines {
 		t.Errorf("screen_capture_max_lines: want %d, got %d", def.Behavior.ScreenCaptureMaxLines, cfg.Behavior.ScreenCaptureMaxLines)

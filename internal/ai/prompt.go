@@ -15,6 +15,7 @@ Behavior:
 - When the user needs a command: respond with "type": "command" and the command(s). You can include a short "message" to explain what it does or add context.
 - When the user is chatting, asking a question, or needs explanation: respond with "type": "chat" and a text message.
 - You decide which type fits. Not everything needs a command. Sometimes the user just wants to talk.
+- Timestamps in [YYYY-MM-DDTHH:MM:SS] format (local time) are attached to shell activity and conversation entries. Use them to understand recency and time gaps.
 - Be terse. No fluff. Skip basics the user already knows.
 - Suggest the most efficient approach. Have opinions. Respond with a command directly — don't ask clarifying questions unless genuinely ambiguous.
 - NEVER use placeholders like <namespace> or <pod-name>. NEVER fabricate values — this includes "common" defaults like standard Helm labels, typical context names, or conventional namespace names. If a value wasn't explicitly in the conversation, shell history, or user profile, you don't know it. Return a simple discovery command using grep or basic listing with no label selectors or assumptions.
@@ -40,6 +41,9 @@ Chat/explanation:
 Request more shell history to give a better answer. Use "filter" to search, "count" for last N entries:
 {"type": "history", "filter": "git", "count": 30}
 
+Request more conversation context (older entries beyond what's currently visible). Use this when the user references something from earlier in the session or you need more history to give a better answer. "count" controls how many additional entries to load:
+{"type": "context", "count": 100}
+
 Request terminal screen output (Zellij pane scrollback). Use this when a command failed and you need to see the actual error output, or when the user references something visible on screen. "lines" controls how many lines from the bottom (default 20, max configured by user):
 {"type": "screen", "lines": 50}
 
@@ -56,10 +60,11 @@ func BuildQueryPrompt(input string, shellHistory []data.ShellCommand, constraint
 	if len(shellHistory) > 0 {
 		b.WriteString("Recent shell activity:\n")
 		for _, cmd := range shellHistory {
+			ts := data.FormatTimestamp(cmd.Time)
 			if cmd.ExitCode != 0 {
-				fmt.Fprintf(&b, "  $ %s  # exit %d\n", cmd.Command, cmd.ExitCode)
+				fmt.Fprintf(&b, "  [%s] $ %s  # exit %d\n", ts, cmd.Command, cmd.ExitCode)
 			} else {
-				b.WriteString("  $ " + cmd.Command + "\n")
+				fmt.Fprintf(&b, "  [%s] $ %s\n", ts, cmd.Command)
 			}
 		}
 		b.WriteString("\n")

@@ -532,3 +532,67 @@ func TestSearchContext_NoFilter(t *testing.T) {
 		t.Error("should not contain filter label when filter is empty")
 	}
 }
+
+func TestHandleResponses_ContextRequest(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write some conversation entries so LoadMoreContext has something to load
+	convoPath := filepath.Join(dir, "conversation.jsonl")
+	var b strings.Builder
+	for i := 0; i < 10; i++ {
+		entry := `{"type":"query","content":"q` + string(rune('A'+i)) + `","time":` + string(rune('1'+i)) + `}`
+		b.WriteString(entry + "\n")
+	}
+	_ = os.WriteFile(convoPath, []byte(b.String()), 0644)
+
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+
+	convo, _ := data.LoadConversation(dir, 50)
+	if convo == nil {
+		convo = data.NewConversation()
+	}
+
+	constraints := []string{}
+	retryReason := ""
+	stepsRemaining := 0
+
+	responses := []ai.TashResponse{
+		{Type: "context", Count: 50},
+	}
+	usage := ai.Usage{}
+
+	_, action := handleResponses(responses, cfg, convo, nil, &constraints, false, &retryReason, &stepsRemaining, "req1", usage)
+
+	if action != actionRetry {
+		t.Errorf("expected actionRetry for context request, got %d", action)
+	}
+	if retryReason != "Loading context" {
+		t.Errorf("expected retry reason 'Loading context', got %q", retryReason)
+	}
+	if len(constraints) == 0 {
+		t.Error("expected constraints to be populated")
+	}
+}
+
+func TestHandleResponses_ContextSkipWhenCapped(t *testing.T) {
+	convo := data.NewConversation()
+	constraints := []string{}
+	retryReason := ""
+	stepsRemaining := 0
+
+	responses := []ai.TashResponse{
+		{Type: "context", Count: 50},
+	}
+
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(t.TempDir())
+	usage := ai.Usage{}
+
+	// skipToolCalls=true
+	_, action := handleResponses(responses, cfg, convo, nil, &constraints, true, &retryReason, &stepsRemaining, "req1", usage)
+
+	if action != actionNothing {
+		t.Errorf("expected actionNothing when tool calls capped, got %d", action)
+	}
+}

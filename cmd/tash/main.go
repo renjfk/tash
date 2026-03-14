@@ -29,7 +29,10 @@ Just type naturally in fish — unknown commands go to AI automatically.
 Failed commands that look like natural language are auto-intercepted.
 Run 'tash init' to set everything up.`
 
-var version = "dev"
+var (
+	version   = "dev"
+	buildTime = "unknown"
+)
 
 func init() {
 	// Set lipgloss default renderer to stderr so color detection works when
@@ -49,6 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	query.Version = version
 	data.RegisterThemeNames(tui.ThemeNames())
 	closeLog := data.InitLogger(cfg.DataDir(), cfg.LogLevel)
 	defer closeLog()
@@ -91,7 +95,7 @@ func main() {
 		data.Info("conversation cleared")
 
 	case "version":
-		fmt.Println("tash", version)
+		fmt.Printf("tash %s (built %s)\n", version, buildTime)
 
 	case "usage":
 		runUsage(cfg)
@@ -351,8 +355,8 @@ func runUsage(cfg *data.Config) {
 		}
 	}
 
-	first := time.Unix(stats.FirstCall, 0).Format("2006-01-02 15:04")
-	last := time.Unix(stats.LastCall, 0).Format("2006-01-02 15:04")
+	first := data.FormatTimestamp(stats.FirstCall)
+	last := data.FormatTimestamp(stats.LastCall)
 
 	fmt.Fprintf(os.Stderr, "Token usage (%s to %s)\n\n", first, last)
 	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s\n", "Action", "Calls", "Prompt", "Completion", "Total")

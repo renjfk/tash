@@ -16,8 +16,8 @@ func TestBuildQueryPrompt_InputOnly(t *testing.T) {
 
 func TestBuildQueryPrompt_WithHistory(t *testing.T) {
 	history := []data.ShellCommand{
-		{Command: "ls -la", ExitCode: 0},
-		{Command: "cd /tmp", ExitCode: 0},
+		{Command: "ls -la", ExitCode: 0, Time: 1700000001},
+		{Command: "cd /tmp", ExitCode: 0, Time: 1700000002},
 	}
 	got := BuildQueryPrompt("show files", history, nil)
 
@@ -30,6 +30,10 @@ func TestBuildQueryPrompt_WithHistory(t *testing.T) {
 	if !strings.Contains(got, "$ cd /tmp") {
 		t.Error("expected cd /tmp in history")
 	}
+	// Should include timestamps
+	if !strings.Contains(got, "[2023-11-") {
+		t.Error("expected timestamp in shell activity")
+	}
 	if !strings.HasSuffix(got, "show files") {
 		t.Error("expected input at the end")
 	}
@@ -37,12 +41,26 @@ func TestBuildQueryPrompt_WithHistory(t *testing.T) {
 
 func TestBuildQueryPrompt_FailedCommand(t *testing.T) {
 	history := []data.ShellCommand{
-		{Command: "make build", ExitCode: 2},
+		{Command: "make build", ExitCode: 2, Time: 1700000001},
 	}
 	got := BuildQueryPrompt("fix it", history, nil)
 
 	if !strings.Contains(got, "# exit 2") {
 		t.Error("expected exit code annotation for failed command")
+	}
+	if !strings.Contains(got, "[2023-11-") {
+		t.Error("expected timestamp for failed command")
+	}
+}
+
+func TestBuildQueryPrompt_ZeroTimestamp(t *testing.T) {
+	history := []data.ShellCommand{
+		{Command: "ls", ExitCode: 0, Time: 0},
+	}
+	got := BuildQueryPrompt("test", history, nil)
+
+	if !strings.Contains(got, "[unknown]") {
+		t.Error("expected [unknown] for zero timestamp")
 	}
 }
 
@@ -86,6 +104,7 @@ func TestSystemPrompt_ContainsKeyPhrases(t *testing.T) {
 		"memory",
 		"plan",
 		"screen",
+		"context",
 	}
 	for _, phrase := range phrases {
 		if !strings.Contains(SystemPrompt, phrase) {
