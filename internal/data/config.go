@@ -85,7 +85,8 @@ func DefaultConfig() *Config {
 }
 
 // LoadConfig reads config.yaml from the tash data directory.
-// Returns default config if file doesn't exist.
+// Returns default config if file doesn't exist. Invalid values are
+// silently reset to their defaults.
 func LoadConfig() (*Config, error) {
 	cfg := DefaultConfig()
 	dataDir, err := resolveDataDir()
@@ -108,7 +109,43 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	cfg.validate()
 	return cfg, nil
+}
+
+// validate resets any invalid config values to their defaults.
+func (c *Config) validate() {
+	def := DefaultConfig()
+
+	if !validLogLevel[c.LogLevel] {
+		c.LogLevel = def.LogLevel
+	}
+	if !validTerminalColor[c.Terminal.Color] {
+		c.Terminal.Color = def.Terminal.Color
+	}
+	if c.Model.MaxTokens <= 0 {
+		c.Model.MaxTokens = def.Model.MaxTokens
+	}
+	if c.Behavior.MaxRetries <= 0 {
+		c.Behavior.MaxRetries = def.Behavior.MaxRetries
+	}
+	if c.Behavior.MaxMemories <= 0 {
+		c.Behavior.MaxMemories = def.Behavior.MaxMemories
+	}
+	if c.Behavior.ScreenCaptureMaxLines <= 0 {
+		c.Behavior.ScreenCaptureMaxLines = def.Behavior.ScreenCaptureMaxLines
+	}
+	if c.Profile.RebuildInterval <= 0 {
+		c.Profile.RebuildInterval = def.Profile.RebuildInterval
+	}
+}
+
+var validLogLevel = map[string]bool{
+	"debug": true, "info": true, "warn": true, "error": true,
+}
+
+var validTerminalColor = map[string]bool{
+	"auto": true, "256": true, "16": true, "none": true,
 }
 
 // DataDir returns the tash data directory path.
@@ -145,7 +182,7 @@ func (c *Config) Migrate() (bool, error) {
 		return false, nil // nothing to migrate
 	}
 
-	data, err := yaml.Marshal(c)
+	data, err := renderConfig(c)
 	if err != nil {
 		return false, fmt.Errorf("marshal config: %w", err)
 	}
@@ -160,11 +197,107 @@ func (c *Config) WriteDefault() (bool, error) {
 		return false, nil
 	}
 
-	data, err := yaml.Marshal(c)
+	data, err := renderConfig(c)
 	if err != nil {
 		return false, err
 	}
 	return true, os.WriteFile(path, data, 0644)
+}
+
+// renderConfig produces YAML with descriptive comments above each field.
+func renderConfig(c *Config) ([]byte, error) {
+	var node yaml.Node
+	if err := node.Encode(c); err != nil {
+		return nil, fmt.Errorf("encode config: %w", err)
+	}
+
+	doc := &node
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
+		doc = doc.Content[0]
+	}
+
+	annotateNode(doc, configComments)
+	out, err := yaml.Marshal(&node)
+	if err != nil {
+		return nil, fmt.Errorf("marshal config: %w", err)
+	}
+	return out, nil
+}
+
+// fieldComment holds the comment and optional nested comments for a YAML key.
+type fieldComment struct {
+	comment  string
+	children map[string]fieldComment
+}
+
+// configComments defines the comment hierarchy matching the Config struct.
+var configComments = map[string]fieldComment{
+	"model": {
+		comment: "AI model and endpoint configuration",
+		children: map[string]fieldComment{
+			"name":        {comment: "model identifier sent to the API"},
+			"endpoint":    {comment: "base URL for the OpenAI-compatible API"},
+			"api_key_env": {comment: "environment variable containing the API key"},
+			"max_tokens":  {comment: "maximum tokens in the AI response"},
+		},
+	},
+	"behavior": {
+		comment: "runtime behavior settings",
+		children: map[string]fieldComment{
+			"max_retries":              {comment: "retry attempts on API or parse failures"},
+			"max_memories":             {comment: "maximum durable memories kept in conversation history"},
+			"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
+			"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},
+			"screen_capture_max_lines": {comment: "maximum lines the AI can request from terminal scrollback"},
+		},
+	},
+	"profile": {
+		comment: "user profile rebuild settings",
+		children: map[string]fieldComment{
+			"rebuild_interval": {comment: "seconds between automatic profile rebuilds"},
+			"history_path":     {comment: "path to fish shell history file (~ is expanded)"},
+		},
+	},
+	"theme": {
+		comment: "spinner and accent color theme",
+		children: map[string]fieldComment{
+			"name":  {comment: "preset: solarized, gruvbox, nord, dracula, monokai, catppuccin,\ntokyo-night, rose-pine, kanagawa, everforest, onedark, nightfox"},
+			"color": {comment: "custom hex color (e.g. \"#FF4085\"), overrides name when set"},
+		},
+	},
+	"terminal": {
+		comment: "terminal compatibility settings",
+		children: map[string]fieldComment{
+			"ascii": {comment: "use ASCII-only characters, no Unicode (true/false)"},
+			"color": {comment: "color profile: auto, 256, 16, none"},
+		},
+	},
+	"log_level": {
+		comment: "log verbosity written to tash.log: debug, info, warn, error",
+	},
+}
+
+// annotateNode walks a mapping node and sets HeadComment from the comments map.
+// yaml.v3 renders HeadComment as "# <text>" automatically.
+func annotateNode(node *yaml.Node, comments map[string]fieldComment) {
+	if node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i]
+		val := node.Content[i+1]
+
+		fc, ok := comments[key.Value]
+		if !ok {
+			continue
+		}
+
+		key.HeadComment = fc.comment
+
+		if val.Kind == yaml.MappingNode && fc.children != nil {
+			annotateNode(val, fc.children)
+		}
+	}
 }
 
 func resolveDataDir() (string, error) {

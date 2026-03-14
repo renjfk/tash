@@ -109,36 +109,8 @@ or run them before pressing Enter.
 
 ### Configuration
 
-Config lives at `~/.config/tash/config.yaml` and is created on `tash init`. All fields have sensible defaults:
-
-```yaml
-model:
-  name: "claude-sonnet-4-6"
-  endpoint: "https://api.anthropic.com/v1"
-  api_key_env: "ANTHROPIC_API_KEY"
-  max_tokens: 2048
-
-behavior:
-  max_retries: 3
-  max_memories: 50
-  auto_intercept: true
-  screen_capture: true
-  screen_capture_max_lines: 200
-
-profile:
-  rebuild_interval: 3600
-  history_path: "~/.local/share/fish/fish_history"
-
-theme:
-  name: "solarized"
-  color: ""
-
-terminal:
-  ascii: false
-  color: "auto"
-
-log_level: "info"
-```
+Config lives at `~/.config/tash/config.yaml` and is created on `tash init`. The generated file includes
+inline comments describing each field and its valid values. Invalid values are silently reset to defaults.
 
 | Field                               | Description                                                    |
 |-------------------------------------|----------------------------------------------------------------|
@@ -150,7 +122,7 @@ log_level: "info"
 | `behavior.screen_capture`           | Capture terminal screen content for AI context                 |
 | `behavior.screen_capture_max_lines` | Maximum lines to capture from terminal screen                  |
 | `profile.rebuild_interval`          | Seconds between background profile rebuilds from shell history |
-| `theme.name`                        | Preset theme (see below)                                       |
+| `theme.name`                        | Preset theme (see comments in config for full list)            |
 | `theme.color`                       | Custom hex color, overrides theme name                         |
 | `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals        |
 | `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`            |
