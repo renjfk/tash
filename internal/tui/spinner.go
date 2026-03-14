@@ -17,9 +17,6 @@ const (
 	holdEnd   = 9
 	holdStart = 30
 	interval  = 40 * time.Millisecond
-
-	activeChar   = "■"
-	inactiveChar = "⬝"
 )
 
 var (
@@ -28,18 +25,9 @@ var (
 	elapsedStyle = stderrRenderer.NewStyle().Faint(true)
 )
 
-// Faces is the shared set of tash companion faces used in greetings and spinner.
-var Faces = []string{
-	"(◕‿◕)", // default
-	"(◐‿◐)", // look right
-	"(◑‿◑)", // look left
-	"(◔‿◔)", // look up
-}
-
-var glances = []string{
-	"(◐‿◐)", // look right
-	"(◑‿◑)", // look left
-	"(◔‿◔)", // look up
+// Faces returns the shared set of tash companion faces used in greetings and spinner.
+func Faces() []string {
+	return activeChars.Faces
 }
 
 // faceSeed is set at process start so each invocation produces a different sequence.
@@ -59,6 +47,8 @@ func FaceHash(n int) int {
 // face returns the tash companion face based on a global frame counter.
 // Blinks at irregular intervals, changes expression every 1-3s, sleepy after ~8s.
 func face(frame int) string {
+	chars := activeChars
+
 	// Blink check — walk through variable-length blink intervals.
 	// Each interval is 30-80 frames (1.2-3.2s), blink lasts 3 frames (~120ms).
 	blinkPos := 0
@@ -67,7 +57,7 @@ func face(frame int) string {
 		h := FaceHash(blinkSeg*7 + faceSeed)
 		gap := 25 + h%25 // 25..49 frames between blinks (1-2s)
 		if frame >= blinkPos+gap && frame < blinkPos+gap+3 {
-			return "(-‿-)"
+			return chars.Blink
 		}
 		blinkPos += gap + 3
 		blinkSeg++
@@ -75,7 +65,7 @@ func face(frame int) string {
 
 	// After ~8s go sleepy
 	if frame > 200 {
-		return "(◡‿◡)"
+		return chars.Sleepy
 	}
 
 	// Expression changes — walk through variable-length segments.
@@ -86,17 +76,17 @@ func face(frame int) string {
 		h := FaceHash(seg + faceSeed)
 		segLen := 25 + h%50
 		if frame < pos+segLen {
-			idx := (h / 50) % (len(glances) + 1)
-			if idx < len(glances) {
-				return glances[idx]
+			idx := (h / 50) % (len(chars.Glances) + 1)
+			if idx < len(chars.Glances) {
+				return chars.Glances[idx]
 			}
-			return "(◕‿◕)"
+			return chars.Default
 		}
 		pos += segLen
 		seg++
 	}
 
-	return "(◕‿◕)"
+	return chars.Default
 }
 
 // phaseMsg updates the spinner phase label.
@@ -289,12 +279,13 @@ func (m spinnerModel) View() string {
 	absFrame := m.cycle*totalFrames() + m.frame
 	b.WriteString(faceStyle.Render(face(absFrame)))
 	b.WriteString(" ")
+	chars := activeChars
 	for i := 0; i < dotCount; i++ {
 		idx := colorIndex(i, s)
 		if idx >= 0 && idx < trailLen {
-			b.WriteString(stderrRenderer.NewStyle().Foreground(lipgloss.Color(activeTheme.TrailHex[idx])).Render(activeChar))
+			b.WriteString(stderrRenderer.NewStyle().Foreground(lipgloss.Color(activeTheme.TrailHex[idx])).Render(chars.ActiveDot))
 		} else {
-			b.WriteString(stderrRenderer.NewStyle().Foreground(inactiveCol).Render(inactiveChar))
+			b.WriteString(stderrRenderer.NewStyle().Foreground(inactiveCol).Render(chars.InactiveDot))
 		}
 	}
 

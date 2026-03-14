@@ -14,6 +14,7 @@ type Config struct {
 	Behavior BehaviorConfig `yaml:"behavior"`
 	Profile  ProfileConfig  `yaml:"profile"`
 	Theme    ThemeConfig    `yaml:"theme"`
+	Terminal TerminalConfig `yaml:"terminal"`
 	LogLevel string         `yaml:"log_level"`
 	dataDir  string
 }
@@ -22,6 +23,12 @@ type Config struct {
 type ThemeConfig struct {
 	Name  string `yaml:"name"`  // preset name: blue, green, purple, orange, pink, red, cyan
 	Color string `yaml:"color"` // custom hex color (e.g. "#FF4085"), overrides name
+}
+
+// TerminalConfig holds terminal compatibility settings.
+type TerminalConfig struct {
+	ASCII bool   `yaml:"ascii"` // use ASCII-only characters when true
+	Color string `yaml:"color"` // color profile override: auto, 256, 16, none
 }
 
 // ModelConfig holds AI model settings.
@@ -65,6 +72,9 @@ func DefaultConfig() *Config {
 		},
 		Theme: ThemeConfig{
 			Name: "solarized",
+		},
+		Terminal: TerminalConfig{
+			Color: "auto",
 		},
 		LogLevel: "info",
 		Profile: ProfileConfig{

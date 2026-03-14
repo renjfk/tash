@@ -52,6 +52,7 @@ func main() {
 	closeLog := data.InitLogger(cfg.DataDir(), cfg.LogLevel)
 	defer closeLog()
 
+	tui.ApplyCompat(cfg.Terminal.ASCII, cfg.Terminal.Color)
 	tui.ApplyTheme(cfg.Theme.Name, cfg.Theme.Color)
 
 	switch os.Args[1] {
@@ -378,7 +379,8 @@ func runGreet() {
 	seed := int(time.Now().UnixNano() & 0x7fffffff)
 	h1 := tui.FaceHash(seed)
 	h2 := tui.FaceHash(seed + 31)
-	f := tui.Faces[h1%len(tui.Faces)]
+	faces := tui.Faces()
+	f := faces[h1%len(faces)]
 	msg := greetMessages[h2%len(greetMessages)]
 	accent := tui.ActiveTheme().Accent
 	face := lipgloss.NewStyle().Foreground(accent).Render(f)

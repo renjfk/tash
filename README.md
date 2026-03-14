@@ -122,6 +122,8 @@ behavior:
   max_retries: 3
   max_memories: 50
   auto_intercept: true
+  screen_capture: true
+  screen_capture_max_lines: 200
 
 profile:
   rebuild_interval: 3600
@@ -131,19 +133,27 @@ theme:
   name: "solarized"
   color: ""
 
+terminal:
+  ascii: false
+  color: "auto"
+
 log_level: "info"
 ```
 
-| Field                      | Description                                                    |
-|----------------------------|----------------------------------------------------------------|
-| `model.name`               | Any model supported by the configured endpoint                 |
-| `model.endpoint`           | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)    |
-| `model.api_key_env`        | Environment variable holding the API key                       |
-| `behavior.auto_intercept`  | Automatically intercept failed natural language commands       |
-| `behavior.max_memories`    | Durable facts the AI remembers about you across sessions       |
-| `profile.rebuild_interval` | Seconds between background profile rebuilds from shell history |
-| `theme.name`               | Preset theme (see below)                                       |
-| `theme.color`              | Custom hex color, overrides theme name                         |
+| Field                               | Description                                                    |
+|-------------------------------------|----------------------------------------------------------------|
+| `model.name`                        | Any model supported by the configured endpoint                 |
+| `model.endpoint`                    | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)    |
+| `model.api_key_env`                 | Environment variable holding the API key                       |
+| `behavior.auto_intercept`           | Automatically intercept failed natural language commands       |
+| `behavior.max_memories`             | Durable facts the AI remembers about you across sessions       |
+| `behavior.screen_capture`           | Capture terminal screen content for AI context                 |
+| `behavior.screen_capture_max_lines` | Maximum lines to capture from terminal screen                  |
+| `profile.rebuild_interval`          | Seconds between background profile rebuilds from shell history |
+| `theme.name`                        | Preset theme (see below)                                       |
+| `theme.color`                       | Custom hex color, overrides theme name                         |
+| `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals        |
+| `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`            |
 
 Available themes: `solarized` `gruvbox` `nord` `dracula` `monokai` `catppuccin`
 `tokyo-night` `rose-pine` `kanagawa` `everforest` `onedark` `nightfox`
