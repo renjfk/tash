@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/renjfk/tash/internal/data"
 )
 
 func TestHandleFailedCommand(t *testing.T) {
@@ -146,26 +148,26 @@ func TestExtractFlag(t *testing.T) {
 	}
 }
 
-func TestReadWriteLastUpdate(t *testing.T) {
+func TestReadWriteLastRebuild(t *testing.T) {
 	dir := t.TempDir()
 
 	var ts int64 = 1700000001
-	if err := writeLastUpdate(dir, ts); err != nil {
-		t.Fatalf("writeLastUpdate: %v", err)
+	if err := writeLastRebuild(dir, ts); err != nil {
+		t.Fatalf("writeLastRebuild: %v", err)
 	}
 
-	got, err := readLastUpdate(dir)
+	got, err := readLastRebuild(dir)
 	if err != nil {
-		t.Fatalf("readLastUpdate: %v", err)
+		t.Fatalf("readLastRebuild: %v", err)
 	}
 	if got != ts {
 		t.Errorf("expected %d, got %d", ts, got)
 	}
 }
 
-func TestReadLastUpdate_MissingFile(t *testing.T) {
+func TestReadLastRebuild_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	_, err := readLastUpdate(dir)
+	_, err := readLastRebuild(dir)
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -199,37 +201,37 @@ func TestRemovePIDFile(t *testing.T) {
 	}
 }
 
-func TestIsUpdateRunning_CurrentProcess(t *testing.T) {
+func TestIsBgProcessRunning_CurrentProcess(t *testing.T) {
 	dir := t.TempDir()
 	writePIDFile(dir) // writes current PID
 
 	// Signal(nil) may not work consistently on all platforms for the
 	// current process, so just verify it doesn't panic/crash.
 	// The important behavior is that stale PIDs return false (tested below).
-	_ = isUpdateRunning(dir)
+	_ = isBgProcessRunning(dir)
 }
 
-func TestIsUpdateRunning_NoFile(t *testing.T) {
+func TestIsBgProcessRunning_NoFile(t *testing.T) {
 	dir := t.TempDir()
-	if isUpdateRunning(dir) {
+	if isBgProcessRunning(dir) {
 		t.Error("expected false when no PID file")
 	}
 }
 
-func TestIsUpdateRunning_StalePID(t *testing.T) {
+func TestIsBgProcessRunning_StalePID(t *testing.T) {
 	dir := t.TempDir()
 	// Write a PID that is very unlikely to be running
 	_ = os.WriteFile(filepath.Join(dir, pidFile), []byte("999999999"), 0644)
 
-	if isUpdateRunning(dir) {
+	if isBgProcessRunning(dir) {
 		t.Error("expected false for stale PID")
 	}
 }
 
-func TestIsUpdateRunning_InvalidPID(t *testing.T) {
+func TestIsBgProcessRunning_InvalidPID(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, pidFile), []byte("not-a-number"), 0644)
-	if isUpdateRunning(dir) {
+	if isBgProcessRunning(dir) {
 		t.Error("expected false for invalid PID")
 	}
 }
@@ -306,5 +308,129 @@ func TestScanPATH(t *testing.T) {
 	}
 	if seen["subdir"] {
 		t.Error("directory should not be in binaries")
+	}
+}
+
+func TestCheckVersionUpdate_Disabled(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+	cfg.Behavior.UpdateCheck = false
+
+	// Should return immediately without writing any files
+	checkVersionUpdate(cfg)
+
+	if _, err := os.Stat(filepath.Join(dir, "last_version_check")); !os.IsNotExist(err) {
+		t.Error("expected no version check when disabled")
+	}
+}
+
+func TestCheckVersionUpdate_DevBuild(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+
+	oldVersion := version
+	version = "dev"
+	defer func() { version = oldVersion }()
+
+	checkVersionUpdate(cfg)
+
+	if _, err := os.Stat(filepath.Join(dir, "last_version_check")); !os.IsNotExist(err) {
+		t.Error("expected no version check for dev build")
+	}
+}
+
+func TestCheckVersionUpdate_WithinInterval(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+
+	oldVersion := version
+	version = "0.5"
+	defer func() { version = oldVersion }()
+
+	// Write a recent timestamp so the check is skipped
+	data.WriteVersionCheckTimestamp(dir)
+
+	checkVersionUpdate(cfg)
+
+	// Should not have forked (no PID file)
+	if _, err := os.Stat(filepath.Join(dir, pidFile)); !os.IsNotExist(err) {
+		t.Error("expected no fork when within check interval")
+	}
+}
+
+func TestCheckVersionUpdate_BgAlreadyRunning(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+
+	oldVersion := version
+	version = "0.5"
+	defer func() { version = oldVersion }()
+
+	// Simulate a running background process by writing current PID
+	writePIDFile(dir)
+	defer removePIDFile(dir)
+
+	checkVersionUpdate(cfg)
+
+	// The function should have returned early without forking a second process.
+	// We can't easily assert this beyond "it didn't panic", but the PID file
+	// should still contain the original PID (not overwritten by a fork).
+	d, _ := os.ReadFile(filepath.Join(dir, pidFile))
+	pid, _ := strconv.Atoi(string(d))
+	if pid != os.Getpid() {
+		t.Errorf("expected original PID %d, got %d", os.Getpid(), pid)
+	}
+}
+
+func TestTickBackgroundUpdate_VersionCheck(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+	// Empty history file so the profile rebuild part is a no-op
+	historyPath := filepath.Join(dir, "fish_history")
+	_ = os.WriteFile(historyPath, nil, 0644)
+	cfg.Profile.HistoryPath = historyPath
+
+	oldVersion := version
+	version = "0.5"
+	defer func() { version = oldVersion }()
+
+	// No last_version_check file — should trigger a check
+	err := tickBackgroundUpdate(cfg)
+	if err != nil {
+		t.Fatalf("tickBackgroundUpdate: %v", err)
+	}
+
+	// Should have written the version check timestamp
+	if _, err := os.Stat(filepath.Join(dir, "last_version_check")); os.IsNotExist(err) {
+		t.Error("expected last_version_check to be written")
+	}
+}
+
+func TestTickBackgroundUpdate_VersionCheckDisabled(t *testing.T) {
+	dir := t.TempDir()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(dir)
+	cfg.Behavior.UpdateCheck = false
+	historyPath := filepath.Join(dir, "fish_history")
+	_ = os.WriteFile(historyPath, nil, 0644)
+	cfg.Profile.HistoryPath = historyPath
+
+	oldVersion := version
+	version = "0.5"
+	defer func() { version = oldVersion }()
+
+	err := tickBackgroundUpdate(cfg)
+	if err != nil {
+		t.Fatalf("tickBackgroundUpdate: %v", err)
+	}
+
+	// Should NOT have written the version check timestamp
+	if _, err := os.Stat(filepath.Join(dir, "last_version_check")); !os.IsNotExist(err) {
+		t.Error("expected no version check when disabled")
 	}
 }

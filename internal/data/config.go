@@ -51,6 +51,7 @@ type BehaviorConfig struct {
 	AutoIntercept         bool `yaml:"auto_intercept"`
 	ScreenCapture         bool `yaml:"screen_capture"`
 	ScreenCaptureMaxLines int  `yaml:"screen_capture_max_lines"`
+	UpdateCheck           bool `yaml:"update_check"`
 }
 
 // ProfileConfig holds profile rebuild settings.
@@ -77,6 +78,7 @@ func DefaultConfig() *Config {
 			AutoIntercept:         true,
 			ScreenCapture:         true,
 			ScreenCaptureMaxLines: 200,
+			UpdateCheck:           true,
 		},
 		Theme: ThemeConfig{
 			Name: "solarized",
@@ -293,6 +295,7 @@ func buildConfigComments() map[string]fieldComment {
 				"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
 				"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},
 				"screen_capture_max_lines": {comment: "maximum lines the AI can request from terminal scrollback"},
+				"update_check":             {comment: "check for new releases and show update notices (true/false)"},
 			},
 		},
 		"profile": {

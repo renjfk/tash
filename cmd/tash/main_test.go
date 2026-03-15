@@ -75,13 +75,15 @@ func TestInstallFishIntegration_CreatesConfDir(t *testing.T) {
 	}
 }
 
-func TestRunGreet_NoError(_ *testing.T) {
+func TestRunGreet_NoError(t *testing.T) {
 	// runGreet writes to stderr. Just verify it doesn't panic.
 	old := os.Stderr
 	os.Stderr, _ = os.Open(os.DevNull) //nolint:errcheck
 	defer func() { os.Stderr = old }()
 
-	runGreet()
+	cfg := data.DefaultConfig()
+	cfg.SetDataDir(t.TempDir())
+	runGreet(cfg)
 }
 
 func TestGreetMessages_NotEmpty(t *testing.T) {
