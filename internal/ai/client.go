@@ -49,10 +49,9 @@ type TashResponse struct {
 	Type           string   `json:"type"`                      // "command", "chat", "history", "memory", "plan", "screen", "context"
 	Commands       []string `json:"commands,omitempty"`        // for type "command" or "plan"
 	Message        string   `json:"message,omitempty"`         // explanation, chat text, or memory fact
-	Count          int      `json:"count,omitempty"`           // for type "history" or "context": how many entries (default 50)
+	Count          int      `json:"count,omitempty"`           // quantity: entries for history/context, lines for screen (default 50)
 	Filter         string   `json:"filter,omitempty"`          // for type "history": grep filter
 	StepsRemaining int      `json:"steps_remaining,omitempty"` // for type "plan": estimated remaining steps
-	Lines          int      `json:"lines,omitempty"`           // for type "screen": how many lines to capture (default 20)
 }
 
 // NewClient creates an AI client from config.
@@ -173,7 +172,7 @@ func ParseResponse(raw string) ([]TashResponse, error) {
 		if line == "" {
 			continue
 		}
-		resp := TashResponse{Count: 50, Lines: 20}
+		var resp TashResponse
 		if err := json.Unmarshal([]byte(line), &resp); err != nil {
 			// Retry with sanitized JSON escapes if it looks like JSON
 			if len(line) > 0 && line[0] == '{' {
@@ -188,6 +187,9 @@ func ParseResponse(raw string) ([]TashResponse, error) {
 		}
 		if resp.Type == "" {
 			continue
+		}
+		if resp.Count <= 0 {
+			resp.Count = 50
 		}
 		// Attach preamble text as message if the response doesn't have one
 		if len(preamble) > 0 && resp.Message == "" {

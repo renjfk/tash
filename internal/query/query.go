@@ -229,8 +229,8 @@ func processSideEffects(
 			*retryReason = "Loading context"
 			retry = true
 		case parsed.Type == "screen" && !skipToolCalls:
-			slog.Debug("screen request", "lines", parsed.Lines)
-			constraint := captureScreen(cfg, parsed.Lines)
+			slog.Debug("screen request", "lines", parsed.Count)
+			constraint := captureScreen(cfg, parsed.Count)
 			*constraints = append(*constraints, constraint)
 			*retryReason = "Reading terminal"
 			retry = true

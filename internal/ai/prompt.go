@@ -44,8 +44,8 @@ Request more shell history to give a better answer. Use "filter" to search, "cou
 Request more conversation context (older entries beyond what's currently visible). Use this when the user references something from earlier in the session or you need more history to give a better answer. "count" controls how many additional entries to load:
 {"type": "context", "count": 100}
 
-Request terminal screen output (Zellij pane scrollback). Use this when a command failed and you need to see the actual error output, or when the user references something visible on screen. "lines" controls how many lines from the bottom (default 20, max configured by user):
-{"type": "screen", "lines": 50}
+Request terminal screen output (Zellij pane scrollback). Use this when a command failed and you need to see the actual error output, or when the user references something visible on screen. "count" controls how many lines from the bottom (default 50, max configured by user):
+{"type": "screen", "count": 50}
 
 Store durable facts about the user (name, role, preferences, tech stack, workflows). Always follow a memory line with a chat or command line — the user won't see the memory action:
 {"type": "memory", "message": "User is John, backend engineer working on payment services in Go"}

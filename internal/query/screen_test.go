@@ -165,7 +165,7 @@ func TestHandleResponses_ScreenRequest(t *testing.T) {
 	stepsRemaining := 0
 
 	responses := []ai.TashResponse{
-		{Type: "screen", Lines: 30},
+		{Type: "screen", Count: 30},
 	}
 
 	cfg := data.DefaultConfig()
@@ -200,7 +200,7 @@ func TestHandleResponses_ScreenSkipWhenCapped(t *testing.T) {
 	stepsRemaining := 0
 
 	responses := []ai.TashResponse{
-		{Type: "screen", Lines: 20},
+		{Type: "screen", Count: 20},
 	}
 
 	cfg := data.DefaultConfig()
@@ -249,7 +249,7 @@ func TestCaptureScreen_MaxLinesCap(t *testing.T) {
 }
 
 func TestParseResponse_ScreenType(t *testing.T) {
-	raw := `{"type": "screen", "lines": 50}`
+	raw := `{"type": "screen", "count": 50}`
 	responses, err := ai.ParseResponse(raw)
 	if err != nil {
 		t.Fatalf("ParseResponse: %v", err)
@@ -260,8 +260,8 @@ func TestParseResponse_ScreenType(t *testing.T) {
 	if responses[0].Type != "screen" {
 		t.Errorf("expected type screen, got %q", responses[0].Type)
 	}
-	if responses[0].Lines != 50 {
-		t.Errorf("expected 50 lines, got %d", responses[0].Lines)
+	if responses[0].Count != 50 {
+		t.Errorf("expected 50 lines, got %d", responses[0].Count)
 	}
 }
 
@@ -310,7 +310,7 @@ func TestHandleResponses_ScreenDisabled(t *testing.T) {
 	stepsRemaining := 0
 
 	responses := []ai.TashResponse{
-		{Type: "screen", Lines: 20},
+		{Type: "screen", Count: 20},
 	}
 
 	cfg := data.DefaultConfig()

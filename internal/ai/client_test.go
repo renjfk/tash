@@ -97,14 +97,14 @@ func TestParseResponse_DefaultCount(t *testing.T) {
 	}
 }
 
-func TestParseResponse_DefaultLines(t *testing.T) {
+func TestParseResponse_DefaultCountScreen(t *testing.T) {
 	raw := `{"type": "screen"}`
 	responses, err := ParseResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if responses[0].Lines != 20 {
-		t.Errorf("expected default lines 20, got %d", responses[0].Lines)
+	if responses[0].Count != 50 {
+		t.Errorf("expected default count 50, got %d", responses[0].Count)
 	}
 }
 
@@ -119,27 +119,25 @@ func TestParseResponse_ExplicitCountOverridesDefault(t *testing.T) {
 	}
 }
 
-func TestParseResponse_ExplicitZeroOverridesDefault(t *testing.T) {
+func TestParseResponse_ZeroCountDefaultsTo50(t *testing.T) {
 	raw := `{"type": "history", "count": 0}`
 	responses, err := ParseResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Explicit 0 from AI overrides the default — this is intentional.
-	// Downstream functions handle 0 gracefully (empty results).
-	if responses[0].Count != 0 {
-		t.Errorf("expected explicit 0 to override default, got %d", responses[0].Count)
+	if responses[0].Count != 50 {
+		t.Errorf("expected 0 to be normalized to default 50, got %d", responses[0].Count)
 	}
 }
 
-func TestParseResponse_ExplicitLinesOverridesDefault(t *testing.T) {
-	raw := `{"type": "screen", "lines": 50}`
+func TestParseResponse_ExplicitCountScreen(t *testing.T) {
+	raw := `{"type": "screen", "count": 30}`
 	responses, err := ParseResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if responses[0].Lines != 50 {
-		t.Errorf("expected lines 50, got %d", responses[0].Lines)
+	if responses[0].Count != 30 {
+		t.Errorf("expected count 30, got %d", responses[0].Count)
 	}
 }
 
