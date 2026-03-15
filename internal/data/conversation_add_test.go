@@ -46,6 +46,31 @@ func TestAddMemory_TrimsCap(t *testing.T) {
 	}
 }
 
+func TestAddMemory_ReturnsEvicted(t *testing.T) {
+	c := NewConversation()
+	c.maxMemories = 2
+	c.AddMemory("first")
+	c.AddMemory("second")
+
+	evicted := c.AddMemory("third")
+	if len(evicted) != 1 {
+		t.Fatalf("expected 1 evicted memory, got %d", len(evicted))
+	}
+	if evicted[0] != "first" {
+		t.Errorf("expected evicted 'first', got %q", evicted[0])
+	}
+}
+
+func TestAddMemory_NoEviction(t *testing.T) {
+	c := NewConversation()
+	c.maxMemories = 5
+
+	evicted := c.AddMemory("only one")
+	if len(evicted) != 0 {
+		t.Errorf("expected no evictions, got %d", len(evicted))
+	}
+}
+
 func TestAddShellCommand(t *testing.T) {
 	c := NewConversation()
 	c.SetSession("shell-session")

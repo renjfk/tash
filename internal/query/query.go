@@ -215,7 +215,15 @@ func processSideEffects(
 		switch {
 		case parsed.Type == "memory" && parsed.Message != "":
 			slog.Debug("storing memory", "content", parsed.Message)
-			convo.AddMemory(parsed.Message)
+			evicted := convo.AddMemory(parsed.Message)
+			if len(evicted) > 0 {
+				var b strings.Builder
+				b.WriteString("Memory slots full — oldest memories were evicted to make room. Re-store any that are still important:\n")
+				for _, m := range evicted {
+					fmt.Fprintf(&b, "- %s\n", m)
+				}
+				*constraints = append(*constraints, b.String())
+			}
 		case parsed.Type == "history" && !skipToolCalls:
 			slog.Debug("history request", "filter", parsed.Filter, "count", parsed.Count)
 			constraint := searchContext(cfg, convo, shellHistory, parsed.Filter, parsed.Count)

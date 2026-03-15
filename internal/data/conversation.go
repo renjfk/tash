@@ -308,8 +308,9 @@ func AppendEntry(dataDir string, e Entry) error {
 }
 
 // AddMemory stores a durable fact the LLM decided is worth remembering.
-// Oldest memories are dropped when the cap is exceeded.
-func (s *Conversation) AddMemory(content string) {
+// Oldest memories are evicted when the cap is exceeded; their contents are
+// returned so the caller can surface them to the model for possible re-storage.
+func (s *Conversation) AddMemory(content string) []string {
 	s.Entries = append(
 		s.Entries, Entry{
 			Type:    "memory",
@@ -318,7 +319,7 @@ func (s *Conversation) AddMemory(content string) {
 			Time:    time.Now().Unix(),
 		},
 	)
-	s.trimMemories()
+	return s.trimMemories()
 }
 
 // AddShellCommand records a command the user ran in the shell.
@@ -598,7 +599,7 @@ func (s *Conversation) trim() {
 	}
 }
 
-func (s *Conversation) trimMemories() {
+func (s *Conversation) trimMemories() []string {
 	var count int
 	for _, e := range s.Entries {
 		if e.Type == "memory" {
@@ -606,21 +607,25 @@ func (s *Conversation) trimMemories() {
 		}
 	}
 	if count <= s.maxMemories {
-		return
+		return nil
 	}
 
-	dropped := count - s.maxMemories
-	filtered := make([]Entry, 0, len(s.Entries)-dropped)
+	toDrop := count - s.maxMemories
+	evicted := make([]string, 0, toDrop)
+	dropped := toDrop
+	filtered := make([]Entry, 0, len(s.Entries)-toDrop)
 	for _, e := range s.Entries {
 		if e.Type == "memory" && dropped > 0 {
+			evicted = append(evicted, e.Content)
 			dropped--
 			continue
 		}
 		filtered = append(filtered, e)
 	}
 	s.Entries = filtered
-	s.savedCount -= count - s.maxMemories
+	s.savedCount -= toDrop
 	if s.savedCount < 0 {
 		s.savedCount = 0
 	}
+	return evicted
 }

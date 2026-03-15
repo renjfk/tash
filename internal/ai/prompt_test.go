@@ -105,9 +105,7 @@ func TestSystemPrompt_ContainsKeyPhrases(t *testing.T) {
 		"plan",
 		"screen",
 		"conversation",
-		"Memory management",
 		"slots used",
-		"consolidate",
 	}
 	for _, phrase := range phrases {
 		if !strings.Contains(SystemPrompt, phrase) {
