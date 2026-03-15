@@ -19,6 +19,12 @@ var Version = "dev"
 // Run executes the query flow. The AI decides whether to respond with
 // commands or chat text. Returns the command (if any) for fish to place in the command line.
 func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input string) (string, error) {
+	if cfg.Behavior.UpdateCheck {
+		if info := data.ReadUpdateAvailable(cfg.DataDir(), Version); info != nil {
+			fmt.Fprintf(os.Stderr, "%s\n", data.FormatUpdateNotification(info))
+		}
+	}
+
 	client := ai.NewClient(cfg)
 	convo.AddQuery(input)
 
@@ -29,7 +35,8 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	shellHistory := convo.RecentShellCommands(10)
 	systemPrompt := buildSystemPrompt(prof, convo)
 
-	slog.Debug("query start",
+	slog.Debug(
+		"query start",
 		"input", input,
 		"shell_history", len(shellHistory),
 		"system_prompt_len", len(systemPrompt),
@@ -62,7 +69,8 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			messages = buildMessages(convo, shellHistory, input, constraints)
 		}
 
-		slog.Info("query attempt",
+		slog.Info(
+			"query attempt",
 			"attempt", attempt,
 			"failures", failures,
 			"messages", len(messages),
@@ -87,7 +95,13 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			continue
 		}
 
-		if err := data.RecordUsage(cfg.DataDir(), "query", cfg.Model.Name, resp.Usage.PromptTokens, resp.Usage.CompletionTokens); err != nil {
+		if err := data.RecordUsage(
+			cfg.DataDir(),
+			"query",
+			cfg.Model.Name,
+			resp.Usage.PromptTokens,
+			resp.Usage.CompletionTokens,
+		); err != nil {
 			slog.Warn("record usage", "error", err)
 		}
 
@@ -113,7 +127,18 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			spinner.Stop()
 		}
 		reqID := data.NewRequestID()
-		result, action := handleResponses(responses, cfg, convo, shellHistory, &constraints, toolCalls >= maxToolCalls, &retryReason, &stepsRemaining, reqID, resp.Usage)
+		result, action := handleResponses(
+			responses,
+			cfg,
+			convo,
+			shellHistory,
+			&constraints,
+			toolCalls >= maxToolCalls,
+			&retryReason,
+			&stepsRemaining,
+			reqID,
+			resp.Usage,
+		)
 		switch action {
 		case actionDone:
 			slog.Info("query done", "attempt", attempt)
@@ -142,7 +167,10 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 		default:
 			slog.Warn("no terminal response", "attempt", attempt)
 			if toolCalls >= maxToolCalls {
-				constraints = append(constraints, "No more tool calls available (history, screen). Respond with a command or chat based on what you already know.")
+				constraints = append(
+					constraints,
+					"No more tool calls available (history, screen). Respond with a command or chat based on what you already know.",
+				)
 			}
 			lastErr = fmt.Errorf("no chat or command in response")
 			failures++
@@ -299,12 +327,22 @@ func loadMoreContext(cfg *data.Config, convo *data.Conversation, count int) stri
 
 	// Return a summary — the full entries are now in the conversation and will
 	// appear in the next buildMessages call via FormatForAI()
-	return fmt.Sprintf("Loaded %d additional conversation entries (now %d total entries in context)", loaded, len(convo.Entries))
+	return fmt.Sprintf(
+		"Loaded %d additional conversation entries (now %d total entries in context)",
+		loaded,
+		len(convo.Entries),
+	)
 }
 
 // searchContext merges results from shell history and conversation entries,
 // deduplicating against each other and against what's already in the prompt.
-func searchContext(cfg *data.Config, convo *data.Conversation, shellHistory []data.ShellCommand, filter string, count int) string {
+func searchContext(
+	cfg *data.Config,
+	convo *data.Conversation,
+	shellHistory []data.ShellCommand,
+	filter string,
+	count int,
+) string {
 	historyEntries := data.SearchHistory(cfg.ResolvedHistoryPath(), filter, count, cfg.Behavior.MaxHistoryResults)
 	historyFormatted := data.FormatHistory(historyEntries)
 	convoResults := convo.Search(filter, count)
@@ -434,11 +472,13 @@ func presentResults(commands []string, convo *data.Conversation, reqID string, u
 		}
 
 		// Intermediate commands: prompt and execute inline
-		action := tui.ShowSuggestion(&tui.Suggestion{
-			Command: cmd,
-			StepNum: i + 1,
-			Total:   len(commands),
-		})
+		action := tui.ShowSuggestion(
+			&tui.Suggestion{
+				Command: cmd,
+				StepNum: i + 1,
+				Total:   len(commands),
+			},
+		)
 
 		switch action {
 		case tui.ActionAccept:
@@ -455,11 +495,13 @@ func presentResults(commands []string, convo *data.Conversation, reqID string, u
 
 		if exitCode != 0 {
 			fmt.Fprintf(os.Stderr, "  %s\n", tui.FailStyle.Render(fmt.Sprintf("exit %d", exitCode)))
-			cont := tui.ShowSuggestion(&tui.Suggestion{
-				Command: "continue with remaining steps?",
-				StepNum: i + 1,
-				Total:   len(commands),
-			})
+			cont := tui.ShowSuggestion(
+				&tui.Suggestion{
+					Command: "continue with remaining steps?",
+					StepNum: i + 1,
+					Total:   len(commands),
+				},
+			)
 			if cont != tui.ActionAccept {
 				return ""
 			}
@@ -483,12 +525,21 @@ func traceAction(action string, cmd string) {
 // executePlanStep presents a plan command for approval, executes it, and captures output.
 // Returns the captured output and exit code. Exit code -1 means user skipped.
 // Token usage and reqID are attached to the command entry.
-func executePlanStep(command string, convo *data.Conversation, step int, total int, reqID string, usage ai.Usage) (string, int) {
-	action := tui.ShowSuggestion(&tui.Suggestion{
-		Command: command,
-		StepNum: step,
-		Total:   total,
-	})
+func executePlanStep(
+	command string,
+	convo *data.Conversation,
+	step int,
+	total int,
+	reqID string,
+	usage ai.Usage,
+) (string, int) {
+	action := tui.ShowSuggestion(
+		&tui.Suggestion{
+			Command: command,
+			StepNum: step,
+			Total:   total,
+		},
+	)
 
 	switch action {
 	case tui.ActionAccept:

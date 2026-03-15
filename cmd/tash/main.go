@@ -78,7 +78,7 @@ func main() {
 		runInit(cfg)
 
 	case "greet":
-		runGreet()
+		runGreet(cfg)
 
 	case "reset":
 		if err := data.ResetConversation(cfg.DataDir()); err != nil {
@@ -380,7 +380,7 @@ var greetMessages = []string{
 	"hey there",
 }
 
-func runGreet() {
+func runGreet(cfg *data.Config) {
 	seed := int(time.Now().UnixNano() & 0x7fffffff)
 	h1 := tui.FaceHash(seed)
 	h2 := tui.FaceHash(seed + 31)
@@ -392,6 +392,13 @@ func runGreet() {
 	name := lipgloss.NewStyle().Bold(true).Foreground(accent).Render("tash")
 	text := lipgloss.NewStyle().Faint(true).Render(msg)
 	fmt.Fprintf(os.Stderr, "%s %s %s\n", face, name, text)
+
+	if cfg.Behavior.UpdateCheck {
+		if info := data.ReadUpdateAvailable(cfg.DataDir(), version); info != nil {
+			notice := lipgloss.NewStyle().Faint(true).Render(data.FormatUpdateNotification(info))
+			fmt.Fprintf(os.Stderr, "%s\n", notice)
+		}
+	}
 }
 
 // extractFlag removes a --flag value pair from args and returns the value and remaining args.

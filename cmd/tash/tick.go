@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	lastUpdateFile = "last_update"
-	pidFile        = "tash_update.pid"
+	lastRebuildFile = "last_profile_rebuild"
+	pidFile         = "tash_bg.pid"
 )
 
 func tickRun(cfg *data.Config, exitCode int, command string, session string) error {
@@ -47,16 +47,20 @@ func tickRun(cfg *data.Config, exitCode int, command string, session string) err
 		handleFailedCommand(command)
 	}
 
-	lastUpdate, err := readLastUpdate(dataDir)
+	// Check for version updates independently of profile rebuild.
+	// This forks a background process only if a check is due.
+	checkVersionUpdate(cfg)
+
+	lastRebuild, err := readLastRebuild(dataDir)
 	if err != nil {
-		slog.Debug("no last_update file", "error", err)
-		lastUpdate = 0
+		slog.Debug("no last_profile_rebuild file", "error", err)
+		lastRebuild = 0
 	}
 
 	now := time.Now().Unix()
-	if now-lastUpdate < int64(cfg.Profile.RebuildInterval) {
+	if now-lastRebuild < int64(cfg.Profile.RebuildInterval) {
 		slog.Debug("profile rebuild skipped, within interval",
-			"last_update", lastUpdate,
+			"last_update", lastRebuild,
 			"now", now,
 			"interval", cfg.Profile.RebuildInterval,
 		)
@@ -64,19 +68,46 @@ func tickRun(cfg *data.Config, exitCode int, command string, session string) err
 	}
 
 	historyPath := cfg.ResolvedHistoryPath()
-	entries, _ := data.ReadHistory(historyPath, lastUpdate)
+	entries, _ := data.ReadHistory(historyPath, lastRebuild)
 	if len(entries) == 0 {
 		slog.Debug("no new history entries since last update")
 		return nil
 	}
 
-	if isUpdateRunning(dataDir) {
+	if isBgProcessRunning(dataDir) {
 		slog.Debug("background update already running, skipping fork")
 		return nil
 	}
 
 	slog.Info("forking background profile update", "new_entries", len(entries))
 	return forkUpdate()
+}
+
+// checkVersionUpdate forks a background update if a version check is due,
+// even when the profile rebuild is not needed.
+func checkVersionUpdate(cfg *data.Config) {
+	if !cfg.Behavior.UpdateCheck {
+		slog.Debug("version check disabled in config")
+		return
+	}
+	if version == "dev" {
+		slog.Debug("version check skipped, dev build")
+		return
+	}
+
+	dataDir := cfg.DataDir()
+	if !data.ShouldCheckVersion(dataDir) {
+		slog.Debug("version check skipped, within interval")
+		return
+	}
+
+	if isBgProcessRunning(dataDir) {
+		slog.Debug("version check skipped, background update already running")
+		return
+	}
+
+	slog.Info("forking background update for version check")
+	_ = forkUpdate()
 }
 
 // InitStats holds stats from the init process for display.
@@ -123,7 +154,7 @@ func tickInit(cfg *data.Config) (*InitStats, error) {
 	}
 
 	slog.Info("tick init complete")
-	if err := writeLastUpdate(dataDir, time.Now().Unix()); err != nil {
+	if err := writeLastRebuild(dataDir, time.Now().Unix()); err != nil {
 		return nil, err
 	}
 
@@ -142,10 +173,17 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 	writePIDFile(dataDir)
 	defer removePIDFile(dataDir)
 
-	lastUpdate, _ := readLastUpdate(dataDir)
+	// Version check runs in the background process regardless of profile rebuild.
+	if cfg.Behavior.UpdateCheck && data.ShouldCheckVersion(dataDir) {
+		slog.Info("checking for new tash release")
+		data.CheckForUpdate(dataDir, version)
+		data.WriteVersionCheckTimestamp(dataDir)
+	}
+
+	lastRebuild, _ := readLastRebuild(dataDir)
 
 	historyPath := cfg.ResolvedHistoryPath()
-	entries, err := data.ReadHistory(historyPath, lastUpdate)
+	entries, err := data.ReadHistory(historyPath, lastRebuild)
 	if err != nil {
 		return err
 	}
@@ -190,7 +228,7 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 
 	if strings.TrimSpace(content) == "NO_CHANGE" {
 		slog.Info("background update: profile unchanged")
-		return writeLastUpdate(dataDir, time.Now().Unix())
+		return writeLastRebuild(dataDir, time.Now().Unix())
 	}
 
 	if err := data.WriteProfile(dataDir, content); err != nil {
@@ -198,7 +236,7 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 	}
 
 	slog.Info("background update: profile updated", "content_len", len(content))
-	return writeLastUpdate(dataDir, time.Now().Unix())
+	return writeLastRebuild(dataDir, time.Now().Unix())
 }
 
 // handleFailedCommand checks whether a failed command should be auto-intercepted.
@@ -271,20 +309,20 @@ func forkUpdate() error {
 	return nil
 }
 
-func readLastUpdate(dataDir string) (int64, error) {
-	d, err := os.ReadFile(filepath.Join(dataDir, lastUpdateFile))
+func readLastRebuild(dataDir string) (int64, error) {
+	d, err := os.ReadFile(filepath.Join(dataDir, lastRebuildFile))
 	if err != nil {
 		return 0, err
 	}
 	return strconv.ParseInt(strings.TrimSpace(string(d)), 10, 64)
 }
 
-func writeLastUpdate(dataDir string, ts int64) error {
-	path := filepath.Join(dataDir, lastUpdateFile)
+func writeLastRebuild(dataDir string, ts int64) error {
+	path := filepath.Join(dataDir, lastRebuildFile)
 	return os.WriteFile(path, []byte(strconv.FormatInt(ts, 10)), 0644)
 }
 
-func isUpdateRunning(dataDir string) bool {
+func isBgProcessRunning(dataDir string) bool {
 	d, err := os.ReadFile(filepath.Join(dataDir, pidFile))
 	if err != nil {
 		return false

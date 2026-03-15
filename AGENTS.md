@@ -42,7 +42,7 @@ cmd/tash/main.go           # thin CLI entry, os.Args switch, delegates to intern
 cmd/tash/tick.go            # post-exec hook: bg profile update, auto-intercept, PATH scan
 cmd/tash/rebuild.go         # profile rebuild orchestration (calls AI)
 internal/ai/               # OpenAI-compatible API client (client.go), prompt builder (prompt.go)
-internal/data/              # all persistent state: config, conversation, history, profile, usage, logging
+internal/data/              # all persistent state: config, conversation, history, profile, usage, update check, logging
 internal/query/             # query orchestration: AI call -> parse response -> execute + tool validation
 internal/tui/               # Knight Rider style spinner + suggestion prompt (bubbletea)
 ```
@@ -185,5 +185,9 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
   conversation entries, deduplicated against what's already in the prompt.
 - History search results include timestamps via `data.FormatHistory`. Max results bounded by `max_history_results`
   config (default 200).
+- Update check: piggybacks on the background tick path. Single HTTP GET to GitHub releases API daily, compares remote
+  tag against compiled version, writes a flag file (`update_available`) when newer. `tash greet` and `tash query` read
+  the flag file and show a one-liner with the inferred upgrade command. `behavior.update_check` (default true) disables
+  both the check and the notification. Dev builds (`version = dev`) skip the check entirely.
 
 

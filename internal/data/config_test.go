@@ -48,6 +48,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Behavior.ScreenCaptureMaxLines != 200 {
 		t.Errorf("expected 200 screen_capture_max_lines, got %d", cfg.Behavior.ScreenCaptureMaxLines)
 	}
+	if !cfg.Behavior.UpdateCheck {
+		t.Error("expected update_check true")
+	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("expected info, got %q", cfg.LogLevel)
 	}
@@ -256,6 +259,7 @@ func TestRenderConfig_Comments(t *testing.T) {
 	for _, want := range []string{
 		"# model identifier sent to the API",
 		"# retry attempts on API or parse failures",
+		"# check for new releases and show update notices",
 		"# seconds between automatic profile rebuilds",
 		"# color profile: auto, 256, 16, none",
 		"# preset: solarized, gruvbox, nord",
