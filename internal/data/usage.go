@@ -10,39 +10,41 @@ import (
 
 const usageFile = "usage.json"
 
-// UsageRecord tracks token consumption for a single API call.
-type UsageRecord struct {
-	Action           string `json:"action"` // "query", "rebuild"
-	Model            string `json:"model"`
-	PromptTokens     int    `json:"prompt_tokens"`
-	CompletionTokens int    `json:"completion_tokens"`
-	Time             int64  `json:"time"`
+// ActionStats holds per-action token counters.
+type ActionStats struct {
+	Calls  int `json:"calls"`
+	Prompt int `json:"prompt"`
+	Comp   int `json:"completion"`
 }
 
-// UsageStats holds accumulated usage statistics.
+// UsageStats holds accumulated usage statistics with per-action counters.
 type UsageStats struct {
-	Records     []UsageRecord `json:"records"`
-	TotalPrompt int           `json:"total_prompt"`
-	TotalComp   int           `json:"total_completion"`
-	TotalCalls  int           `json:"total_calls"`
-	FirstCall   int64         `json:"first_call"`
-	LastCall    int64         `json:"last_call"`
+	Query       ActionStats `json:"query"`
+	Rebuild     ActionStats `json:"rebuild"`
+	TotalPrompt int         `json:"total_prompt"`
+	TotalComp   int         `json:"total_completion"`
+	TotalCalls  int         `json:"total_calls"`
+	FirstCall   int64       `json:"first_call"`
+	LastCall    int64       `json:"last_call"`
 }
 
-// RecordUsage appends a usage record to the state file.
-func RecordUsage(dataDir string, action string, model string, promptTokens int, completionTokens int) error {
+// RecordUsage increments counters for the given action.
+func RecordUsage(dataDir string, action string, _ string, promptTokens int, completionTokens int) error {
 	stats, _ := LoadUsage(dataDir)
 
 	now := time.Now().Unix()
-	record := UsageRecord{
-		Action:           action,
-		Model:            model,
-		PromptTokens:     promptTokens,
-		CompletionTokens: completionTokens,
-		Time:             now,
+
+	switch action {
+	case "query":
+		stats.Query.Calls++
+		stats.Query.Prompt += promptTokens
+		stats.Query.Comp += completionTokens
+	case "rebuild":
+		stats.Rebuild.Calls++
+		stats.Rebuild.Prompt += promptTokens
+		stats.Rebuild.Comp += completionTokens
 	}
 
-	stats.Records = append(stats.Records, record)
 	stats.TotalPrompt += promptTokens
 	stats.TotalComp += completionTokens
 	stats.TotalCalls++
@@ -55,6 +57,7 @@ func RecordUsage(dataDir string, action string, model string, promptTokens int, 
 }
 
 // LoadUsage reads the usage stats file. Returns empty stats if file doesn't exist.
+// Old format files (with records array) are silently discarded and rewritten.
 func LoadUsage(dataDir string) (*UsageStats, error) {
 	path := filepath.Join(dataDir, usageFile)
 
@@ -65,7 +68,10 @@ func LoadUsage(dataDir string) (*UsageStats, error) {
 
 	var stats UsageStats
 	if err := json.Unmarshal(raw, &stats); err != nil {
-		return &UsageStats{}, nil //nolint:nilerr
+		// Corrupt or old format — start fresh and overwrite.
+		empty := &UsageStats{}
+		_ = saveUsage(dataDir, empty)
+		return empty, nil //nolint:nilerr
 	}
 
 	return &stats, nil

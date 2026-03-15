@@ -340,37 +340,17 @@ func runUsage(cfg *data.Config) {
 		return
 	}
 
-	// Count by action
-	queryCalls := 0
-	queryPrompt := 0
-	queryComp := 0
-	rebuildCalls := 0
-	rebuildPrompt := 0
-	rebuildComp := 0
-	for _, r := range stats.Records {
-		switch r.Action {
-		case "query":
-			queryCalls++
-			queryPrompt += r.PromptTokens
-			queryComp += r.CompletionTokens
-		case "rebuild":
-			rebuildCalls++
-			rebuildPrompt += r.PromptTokens
-			rebuildComp += r.CompletionTokens
-		}
-	}
-
 	first := data.FormatTimestamp(stats.FirstCall)
 	last := data.FormatTimestamp(stats.LastCall)
 
 	fmt.Fprintf(os.Stderr, "Token usage (%s to %s)\n\n", first, last)
 	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s\n", "Action", "Calls", "Prompt", "Completion", "Total")
 	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s\n", "------", "-----", "------", "----------", "-----")
-	if queryCalls > 0 {
-		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "query", queryCalls, queryPrompt, queryComp, queryPrompt+queryComp)
+	if stats.Query.Calls > 0 {
+		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "query", stats.Query.Calls, stats.Query.Prompt, stats.Query.Comp, stats.Query.Prompt+stats.Query.Comp)
 	}
-	if rebuildCalls > 0 {
-		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "rebuild", rebuildCalls, rebuildPrompt, rebuildComp, rebuildPrompt+rebuildComp)
+	if stats.Rebuild.Calls > 0 {
+		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "rebuild", stats.Rebuild.Calls, stats.Rebuild.Prompt, stats.Rebuild.Comp, stats.Rebuild.Prompt+stats.Rebuild.Comp)
 	}
 	fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "total", stats.TotalCalls, stats.TotalPrompt, stats.TotalComp, stats.TotalPrompt+stats.TotalComp)
 }
