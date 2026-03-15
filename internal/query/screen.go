@@ -11,6 +11,8 @@ import (
 	"github.com/renjfk/tash/internal/data"
 )
 
+const initialScreenLines = 20
+
 // ansiPattern matches ANSI escape sequences (CSI, OSC, and single-char escapes).
 var ansiPattern = regexp.MustCompile(`\x1b(?:\[[0-9;]*[a-zA-Z]|\][^\x07]*\x07|[()][0-9A-B]|[=>])`)
 
@@ -146,10 +148,10 @@ func initialScreenContext(cfg *data.Config) string {
 		return ""
 	}
 
-	parsed := parseScreenDump(content, 20)
+	parsed := parseScreenDump(content, initialScreenLines)
 	if parsed == "" {
 		return ""
 	}
 
-	return "Terminal screen (last 20 lines):\n" + parsed
+	return fmt.Sprintf("Terminal screen (last %d lines):\n%s", initialScreenLines, parsed)
 }

@@ -120,7 +120,8 @@ func runQuery(cfg *data.Config, input string, session string, outputFile string)
 
 	convo, err := data.LoadConversation(cfg.DataDir(), cfg.Behavior.MaxConversationEntries, cfg.Behavior.MaxMemories)
 	if err != nil {
-		convo = data.NewConversation()
+		data.Error("could not load conversation: " + err.Error())
+		os.Exit(1)
 	}
 	convo.SetSession(session)
 

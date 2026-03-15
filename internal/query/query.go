@@ -32,7 +32,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	defer spinner.Stop()
 
 	// Collect context
-	shellHistory := convo.RecentShellCommands(10)
+	shellHistory := convo.RecentShellCommands()
 	systemPrompt := buildSystemPrompt(cfg, prof, convo)
 
 	slog.Debug(
@@ -53,7 +53,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	// Build multi-turn messages from conversation history
 	messages := buildMessages(convo, shellHistory, input, initialConstraints)
 
-	// Attempt loop: tool calls (history, context, screen) don't count toward retries.
+	// Attempt loop: tool calls (history, conversation, screen) don't count toward retries.
 	// Only real failures (API error, parse error, no terminal response) do.
 	// Tool calls are capped to prevent search loops.
 	maxToolCalls := cfg.Behavior.MaxToolCalls
@@ -199,7 +199,7 @@ func hasTerminalResponse(responses []ai.TashResponse) bool {
 	return false
 }
 
-// processSideEffects handles tool-call responses (memory, history, context, screen)
+// processSideEffects handles tool-call responses (memory, history, conversation, screen)
 // and returns true if a retry is needed.
 func processSideEffects(
 	responses []ai.TashResponse,
@@ -222,11 +222,11 @@ func processSideEffects(
 			*constraints = append(*constraints, constraint)
 			*retryReason = "Searching history"
 			retry = true
-		case parsed.Type == "context" && !skipToolCalls:
-			slog.Debug("context request", "count", parsed.Count)
-			constraint := loadMoreContext(cfg, convo, parsed.Count)
+		case parsed.Type == "conversation" && !skipToolCalls:
+			slog.Debug("conversation request", "count", parsed.Count)
+			constraint := loadMoreConversation(convo, parsed.Count)
 			*constraints = append(*constraints, constraint)
-			*retryReason = "Loading context"
+			*retryReason = "Loading conversation"
 			retry = true
 		case parsed.Type == "screen" && !skipToolCalls:
 			slog.Debug("screen request", "lines", parsed.Count)
@@ -302,13 +302,13 @@ func handleResponses(
 	return "", actionNothing
 }
 
-// loadMoreContext loads additional older conversation entries and returns them
+// loadMoreConversation loads additional older conversation entries and returns them
 // formatted as a constraint string for the AI.
-func loadMoreContext(cfg *data.Config, convo *data.Conversation, count int) string {
-	loaded, err := convo.LoadMoreContext(count, cfg.Behavior.MaxContext)
+func loadMoreConversation(convo *data.Conversation, count int) string {
+	loaded, err := convo.LoadMoreConversation(count)
 	if err != nil {
-		slog.Warn("load more context", "error", err)
-		return "Could not load additional context"
+		slog.Warn("load more conversation", "error", err)
+		return "Could not load additional conversation entries"
 	}
 
 	if loaded == 0 {

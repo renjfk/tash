@@ -41,8 +41,8 @@ Chat/explanation:
 Request more shell history to give a better answer. Use "filter" to search, "count" for last N entries:
 {"type": "history", "filter": "git", "count": 30}
 
-Request more conversation context (older entries beyond what's currently visible). Use this when the user references something from earlier in the session or you need more history to give a better answer. "count" controls how many additional entries to load:
-{"type": "context", "count": 100}
+Load older conversation entries beyond what's currently visible. Use this when the user references something from earlier in the session or you need more context to give a better answer. "count" controls how many additional entries to load:
+{"type": "conversation", "count": 100}
 
 Request terminal screen output (Zellij pane scrollback). Use this when a command failed and you need to see the actual error output, or when the user references something visible on screen. "count" controls how many lines from the bottom (default 50, max configured by user):
 {"type": "screen", "count": 50}

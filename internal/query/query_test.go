@@ -18,7 +18,7 @@ func TestHasTerminalResponse(t *testing.T) {
 		{"command", []ai.TashResponse{{Type: "command"}}, true},
 		{"plan", []ai.TashResponse{{Type: "plan"}}, true},
 		{"history only", []ai.TashResponse{{Type: "history"}}, false},
-		{"context only", []ai.TashResponse{{Type: "context"}}, false},
+		{"conversation only", []ai.TashResponse{{Type: "conversation"}}, false},
 		{"memory only", []ai.TashResponse{{Type: "memory"}}, false},
 		{"empty", nil, false},
 		{"memory then chat", []ai.TashResponse{{Type: "memory"}, {Type: "chat"}}, true},

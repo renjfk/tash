@@ -42,9 +42,6 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Behavior.MaxConversationEntries != 250 {
 		t.Errorf("expected 250 max_conversation_entries, got %d", cfg.Behavior.MaxConversationEntries)
 	}
-	if cfg.Behavior.MaxContext != 500 {
-		t.Errorf("expected 500 max_context, got %d", cfg.Behavior.MaxContext)
-	}
 	if cfg.Behavior.MaxHistoryResults != 200 {
 		t.Errorf("expected 200 max_history_results, got %d", cfg.Behavior.MaxHistoryResults)
 	}
@@ -439,7 +436,6 @@ func TestValidate_NegativeInts(t *testing.T) {
 	cfg.Behavior.MaxToolCalls = -1
 	cfg.Behavior.MaxMemories = -5
 	cfg.Behavior.MaxConversationEntries = 0
-	cfg.Behavior.MaxContext = 0
 	cfg.Behavior.MaxHistoryResults = -1
 	cfg.Behavior.ScreenCaptureMaxLines = 0
 	cfg.Profile.RebuildInterval = -100
@@ -455,7 +451,6 @@ func TestValidate_NegativeInts(t *testing.T) {
 		"behavior.max_tool_calls",
 		"behavior.max_memories",
 		"behavior.max_conversation_entries",
-		"behavior.max_context",
 		"behavior.max_history_results",
 		"behavior.screen_capture_max_lines",
 		"profile.rebuild_interval",

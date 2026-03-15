@@ -29,7 +29,7 @@ the result directly into your command line buffer for you to review, edit, or ru
 - Remembers your recent shell activity and carries context across sessions
 - Builds a profile from your shell history and learns more about you over time
 - Searches your history on its own when it needs more context (agentic history lookup)
-- Loads older conversation context on demand when it needs to look further back
+- Loads older conversation entries on demand when it needs to look further back
 - Validates suggested commands against your actual PATH before showing them
 - Handles multi-step tasks with interactive approval for each step
 - Works with any OpenAI-compatible API endpoint
@@ -111,27 +111,27 @@ or run them before pressing Enter.
 ### Configuration
 
 Config lives at `~/.config/tash/config.yaml` and is created on `tash init`. The generated file includes
-inline comments describing each field and its valid values. Invalid values are silently reset to defaults.
+inline comments describing each field and its valid values. Invalid values cause tash to exit with an error.
 
-| Field                               | Description                                                   |
-|-------------------------------------|---------------------------------------------------------------|
-| `model.name`                        | Any model supported by the configured endpoint                |
-| `model.endpoint`                    | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)   |
-| `model.api_key_env`                 | Environment variable holding the API key                      |
-| `behavior.auto_intercept`           | Automatically intercept failed natural language commands      |
-| `behavior.max_retries`              | Retry attempts on API or parse failures (default 3)           |
-| `behavior.max_tool_calls`           | Tool calls (history, context, screen) per query (default 3)   |
-| `behavior.max_memories`             | Durable facts the AI remembers about you across sessions      |
-| `behavior.max_context`              | Max conversation entries loaded via context requests          |
-| `behavior.max_history_results`      | Max results from shell history searches (default 200)         |
-| `behavior.screen_capture`           | Capture terminal screen content for AI context                |
-| `behavior.screen_capture_max_lines` | Maximum lines to capture from terminal screen                 |
-| `behavior.update_check`             | Check for new releases and show update notices (default true) |
-| `profile.rebuild_interval`          | Seconds between background profile rebuilds (default 86400)   |
-| `theme.name`                        | Preset theme (see below)                                      |
-| `theme.color`                       | Custom hex color, overrides theme name                        |
-| `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals       |
-| `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`           |
+| Field                               | Description                                                                  |
+|-------------------------------------|------------------------------------------------------------------------------|
+| `model.name`                        | Any model supported by the configured endpoint                               |
+| `model.endpoint`                    | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)                  |
+| `model.api_key_env`                 | Environment variable holding the API key                                     |
+| `behavior.auto_intercept`           | Automatically intercept failed natural language commands                     |
+| `behavior.max_retries`              | Retry attempts on API or parse failures (default 3)                          |
+| `behavior.max_tool_calls`           | Tool calls (history, conversation, screen) per query (default 3)             |
+| `behavior.max_memories`             | Durable facts the AI remembers about you across sessions                     |
+| `behavior.max_conversation_entries` | Max conversation entries the AI can load; initial window is 20 (default 250) |
+| `behavior.max_history_results`      | Max results from shell history searches (default 200)                        |
+| `behavior.screen_capture`           | Capture terminal screen content for AI context                               |
+| `behavior.screen_capture_max_lines` | Maximum lines to capture from terminal screen                                |
+| `behavior.update_check`             | Check for new releases and show update notices (default true)                |
+| `profile.rebuild_interval`          | Seconds between background profile rebuilds (default 86400)                  |
+| `theme.name`                        | Preset theme (see below)                                                     |
+| `theme.color`                       | Custom hex color, overrides theme name                                       |
+| `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals                      |
+| `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`                          |
 
 Available themes: `solarized` `gruvbox` `nord` `dracula` `monokai` `catppuccin`
 `tokyo-night` `rose-pine` `kanagawa` `everforest` `onedark` `nightfox`

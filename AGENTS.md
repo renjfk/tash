@@ -161,7 +161,7 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - The binary owns stdin/stdout during `tash query`. TUI goes to stderr, command result
   to stdout. Fish captures stdout via command substitution and places it in the command
   line buffer via `commandline -r`. Single commands skip the TUI prompt entirely.
-- AI decides response type: `command` (with optional explanation), `chat`, `history` request, `context` (load older
+- AI decides response type: `command` (with optional explanation), `chat`, `history` request, `conversation` (load older
   conversation entries), `memory` (store a fact), `screen` (terminal scrollback), or `plan` (iterative step-by-step
   execution).
 - All input goes to the AI -- no local typo detection or filtering.
@@ -170,13 +170,13 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 - `profile.md` System section is hardcoded facts (OS, arch, shell), not AI-generated. Profile rebuilds filter the
   installed tools list to only binaries that appear in shell history (full rebuild) or skip tools entirely (incremental)
   to minimize prompt tokens. Default rebuild interval is 24 hours.
-- `conversation.jsonl` is append-only. Reads from tail via reverse reader, capped at 250 entries + 50 memories in
-  memory. AI can request more via `{"type": "context"}`, bounded by `max_context` config (default 500).
+- `conversation.jsonl` is append-only. Reads from tail via reverse reader. Initial load is 20 entries + memories for
+  fast startup. AI can expand up to `max_conversation_entries` (default 250) via `{"type": "conversation"}` requests.
 - Timestamps (`[YYYY-MM-DDTHH:MM:SS]`) are attached to shell activity and conversation entries so the AI understands
   recency and time gaps. `data.FormatTimestamp` is the single formatter used everywhere.
 - Version and current time are injected into the system prompt under a `--- Session ---` section.
-- Retry loop uses the same model for all attempts (single model config). Tool calls (history, context, screen, memory)
-  don't count as failures. Capped at `max_tool_calls` config (default 3) per query.
+- Retry loop uses the same model for all attempts (single model config). Tool calls (history, conversation, screen,
+  memory) don't count as failures. Capped at `max_tool_calls` config (default 3) per query.
 - Multi-step commands execute inline sequentially, not batched to fish. The last command is returned to fish's command
   line buffer.
 - Plan mode: AI returns one command at a time with `steps_remaining`; command is executed, output captured (capped at

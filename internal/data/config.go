@@ -47,7 +47,6 @@ type BehaviorConfig struct {
 	MaxToolCalls           int  `yaml:"max_tool_calls"`
 	MaxMemories            int  `yaml:"max_memories"`
 	MaxConversationEntries int  `yaml:"max_conversation_entries"`
-	MaxContext             int  `yaml:"max_context"`
 	MaxHistoryResults      int  `yaml:"max_history_results"`
 	AutoIntercept          bool `yaml:"auto_intercept"`
 	ScreenCapture          bool `yaml:"screen_capture"`
@@ -75,7 +74,6 @@ func DefaultConfig() *Config {
 			MaxToolCalls:           3,
 			MaxMemories:            50,
 			MaxConversationEntries: 250,
-			MaxContext:             500,
 			MaxHistoryResults:      200,
 			AutoIntercept:          true,
 			ScreenCapture:          true,
@@ -151,9 +149,6 @@ func (c *Config) validate() error {
 	}
 	if c.Behavior.MaxConversationEntries <= 0 {
 		errs = append(errs, fmt.Sprintf("behavior.max_conversation_entries: must be positive, got %d", c.Behavior.MaxConversationEntries))
-	}
-	if c.Behavior.MaxContext <= 0 {
-		errs = append(errs, fmt.Sprintf("behavior.max_context: must be positive, got %d", c.Behavior.MaxContext))
 	}
 	if c.Behavior.MaxHistoryResults <= 0 {
 		errs = append(errs, fmt.Sprintf("behavior.max_history_results: must be positive, got %d", c.Behavior.MaxHistoryResults))
@@ -300,10 +295,9 @@ func buildConfigComments() map[string]fieldComment {
 			comment: "runtime behavior settings",
 			children: map[string]fieldComment{
 				"max_retries":              {comment: "retry attempts on API or parse failures"},
-				"max_tool_calls":           {comment: "maximum tool calls (history, context, screen) per query"},
+				"max_tool_calls":           {comment: "maximum tool calls (history, conversation, screen) per query"},
 				"max_memories":             {comment: "maximum durable memories kept in conversation history"},
-				"max_conversation_entries": {comment: "maximum conversation entries kept in memory and on disk"},
-				"max_context":              {comment: "maximum conversation entries AI can load via context requests (scroll buffer)"},
+				"max_conversation_entries": {comment: "maximum conversation entries the AI can load (initial window is 20)"},
 				"max_history_results":      {comment: "maximum results returned from shell history searches"},
 				"auto_intercept":           {comment: "re-invoke tash automatically after a failed command (true/false)"},
 				"screen_capture":           {comment: "allow AI to read terminal screen via Zellij (true/false)"},

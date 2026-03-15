@@ -109,7 +109,7 @@ func TestParseResponse_DefaultCountScreen(t *testing.T) {
 }
 
 func TestParseResponse_ExplicitCountOverridesDefault(t *testing.T) {
-	raw := `{"type": "context", "count": 100}`
+	raw := `{"type": "conversation", "count": 100}`
 	responses, err := ParseResponse(raw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

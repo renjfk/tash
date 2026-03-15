@@ -533,10 +533,10 @@ func TestSearchContext_NoFilter(t *testing.T) {
 	}
 }
 
-func TestHandleResponses_ContextRequest(t *testing.T) {
+func TestHandleResponses_ConversationRequest(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write some conversation entries so LoadMoreContext has something to load
+	// Write some conversation entries so LoadMoreConversation has something to load
 	convoPath := filepath.Join(dir, "conversation.jsonl")
 	var b strings.Builder
 	for i := 0; i < 10; i++ {
@@ -558,31 +558,31 @@ func TestHandleResponses_ContextRequest(t *testing.T) {
 	stepsRemaining := 0
 
 	responses := []ai.TashResponse{
-		{Type: "context", Count: 50},
+		{Type: "conversation", Count: 50},
 	}
 	usage := ai.Usage{}
 
 	_, action := handleResponses(responses, cfg, convo, nil, &constraints, false, &retryReason, &stepsRemaining, "req1", usage)
 
 	if action != actionRetry {
-		t.Errorf("expected actionRetry for context request, got %d", action)
+		t.Errorf("expected actionRetry for conversation request, got %d", action)
 	}
-	if retryReason != "Loading context" {
-		t.Errorf("expected retry reason 'Loading context', got %q", retryReason)
+	if retryReason != "Loading conversation" {
+		t.Errorf("expected retry reason 'Loading conversation', got %q", retryReason)
 	}
 	if len(constraints) == 0 {
 		t.Error("expected constraints to be populated")
 	}
 }
 
-func TestHandleResponses_ContextSkipWhenCapped(t *testing.T) {
+func TestHandleResponses_ConversationSkipWhenCapped(t *testing.T) {
 	convo := data.NewConversation()
 	constraints := []string{}
 	retryReason := ""
 	stepsRemaining := 0
 
 	responses := []ai.TashResponse{
-		{Type: "context", Count: 50},
+		{Type: "conversation", Count: 50},
 	}
 
 	cfg := data.DefaultConfig()

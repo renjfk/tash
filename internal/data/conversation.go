@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	stateFile          = "conversation.jsonl"
-	defaultMaxEntries  = 250
-	defaultMaxMemories = 50
+	stateFile           = "conversation.jsonl"
+	initialLoadEntries  = 20
+	recentShellCmdCount = 10
 )
 
 // Entry represents a single event in the conversation timeline.
@@ -49,13 +49,9 @@ type Conversation struct {
 	savedCount  int // number of entries already persisted on disk
 }
 
-// NewConversation creates an empty conversation state.
+// NewConversation creates an empty conversation with default limits. Tests only.
 func NewConversation() *Conversation {
-	return &Conversation{
-		Entries:     []Entry{},
-		maxEntries:  defaultMaxEntries,
-		maxMemories: defaultMaxMemories,
-	}
+	return &Conversation{Entries: []Entry{}, maxEntries: 250, maxMemories: 50}
 }
 
 // SetSession sets the terminal session ID for new entries.
@@ -64,15 +60,19 @@ func (s *Conversation) SetSession(session string) {
 }
 
 // LoadConversation reads conversation state from disk as JSONL.
-// Reads the file backwards to avoid loading the entire file into memory,
-// keeping only the last maxEntries ephemeral entries plus up to maxMemories memories.
+// Loads a small initial window (last 20 ephemeral entries + memories) for fast startup.
+// The AI can expand up to maxEntries via context requests.
 func LoadConversation(dataDir string, maxEntries int, maxMemories int) (*Conversation, error) {
 	path := filepath.Join(dataDir, stateFile)
 	state := &Conversation{maxEntries: maxEntries, maxMemories: maxMemories, dataDir: dataDir}
 
-	loadCount := maxEntries + maxMemories
+	loadCount := initialLoadEntries + maxMemories
 	lines, err := readLinesReverse(path, loadCount)
 	if err != nil {
+		if os.IsNotExist(err) {
+			state.Entries = []Entry{}
+			return state, nil
+		}
 		return nil, err
 	}
 
@@ -90,20 +90,20 @@ func LoadConversation(dataDir string, maxEntries int, maxMemories int) (*Convers
 	return state, nil
 }
 
-// LoadMoreContext loads additional older conversation entries from disk.
-// Returns the number of new entries loaded. The maxTotal parameter caps the
-// total conversation size to prevent unbounded growth (scroll buffer).
-func (s *Conversation) LoadMoreContext(count int, maxTotal int) (int, error) {
+// LoadMoreConversation loads additional older conversation entries from disk.
+// Returns the number of new entries loaded. Capped at maxEntries to prevent
+// unbounded growth.
+func (s *Conversation) LoadMoreConversation(count int) (int, error) {
 	if s.dataDir == "" {
 		return 0, fmt.Errorf("no data directory set")
 	}
 
 	path := filepath.Join(s.dataDir, stateFile)
 
-	// Load more lines than currently loaded
+	// Load more lines than currently loaded, capped at maxEntries
 	newLoadCount := s.maxLoaded + count
-	if maxTotal > 0 && newLoadCount > maxTotal {
-		newLoadCount = maxTotal
+	if newLoadCount > s.maxEntries+s.maxMemories {
+		newLoadCount = s.maxEntries + s.maxMemories
 	}
 	if newLoadCount <= s.maxLoaded {
 		return 0, nil // already at max
@@ -111,7 +111,7 @@ func (s *Conversation) LoadMoreContext(count int, maxTotal int) (int, error) {
 
 	lines, err := readLinesReverse(path, newLoadCount)
 	if err != nil {
-		return 0, fmt.Errorf("load more context: %w", err)
+		return 0, fmt.Errorf("load more conversation: %w", err)
 	}
 
 	// Parse all loaded lines
@@ -228,7 +228,7 @@ func lastIndexByte(b []byte, c byte) int {
 func ResetConversation(dataDir string) error {
 	path := filepath.Join(dataDir, stateFile)
 
-	lines, err := readLinesReverse(path, defaultMaxEntries+defaultMaxMemories)
+	lines, err := readLinesReverse(path, 300)
 	if err != nil {
 		return nil //nolint:nilerr // file doesn't exist — nothing to reset
 	}
@@ -397,10 +397,11 @@ type ShellCommand struct {
 	Time     int64
 }
 
-// RecentShellCommands returns the last N shell commands with exit codes.
+// RecentShellCommands returns the last 10 shell commands with exit codes.
 // Shell entries that match a query entry (tash-routed commands from
 // fish_command_not_found) are excluded — they're not real shell commands.
-func (s *Conversation) RecentShellCommands(n int) []ShellCommand {
+func (s *Conversation) RecentShellCommands() []ShellCommand {
+	n := recentShellCmdCount
 	// Build set of query contents to filter against.
 	// Include shell-unescaped forms so fish-escaped commands match.
 	queries := make(map[string]bool)
