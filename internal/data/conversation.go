@@ -68,13 +68,6 @@ func (s *Conversation) SetSession(session string) {
 // keeping only the last maxEntries ephemeral entries plus up to maxMemories memories.
 func LoadConversation(dataDir string, maxEntries int, maxMemories int) (*Conversation, error) {
 	path := filepath.Join(dataDir, stateFile)
-
-	if maxEntries <= 0 {
-		maxEntries = defaultMaxEntries
-	}
-	if maxMemories <= 0 {
-		maxMemories = defaultMaxMemories
-	}
 	state := &Conversation{maxEntries: maxEntries, maxMemories: maxMemories, dataDir: dataDir}
 
 	loadCount := maxEntries + maxMemories
@@ -531,10 +524,6 @@ type AIMessage struct {
 
 // Search finds conversation entries matching a filter (regex or substring).
 func (s *Conversation) Search(filter string, count int) []string {
-	if count <= 0 {
-		count = 50
-	}
-
 	var results []string
 	var re *regexp.Regexp
 	if filter != "" {

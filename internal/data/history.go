@@ -105,11 +105,8 @@ func AnalyzeHistory(historyPath string) (*HistoryStats, error) {
 // maxResults caps the count to prevent unbounded reads. Streams the file line-by-line
 // to avoid allocating the full history into memory.
 func SearchHistory(historyPath string, filter string, count int, maxResults int) []HistoryEntry {
-	if maxResults <= 0 {
-		maxResults = 200
-	}
 	if count <= 0 {
-		count = 50
+		return nil
 	}
 	if count > maxResults {
 		count = maxResults

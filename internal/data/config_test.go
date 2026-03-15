@@ -409,20 +409,26 @@ func TestWriteDefault_HasComments(t *testing.T) {
 func TestValidate_InvalidLogLevel(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.LogLevel = "verbose"
-	cfg.validate()
+	err := cfg.validate()
 
-	if cfg.LogLevel != "info" {
-		t.Errorf("expected log_level reset to info, got %q", cfg.LogLevel)
+	if err == nil {
+		t.Fatal("expected error for invalid log_level")
+	}
+	if !strings.Contains(err.Error(), "log_level") {
+		t.Errorf("error should mention log_level: %v", err)
 	}
 }
 
 func TestValidate_InvalidTerminalColor(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Terminal.Color = "truecolor"
-	cfg.validate()
+	err := cfg.validate()
 
-	if cfg.Terminal.Color != "auto" {
-		t.Errorf("expected terminal.color reset to auto, got %q", cfg.Terminal.Color)
+	if err == nil {
+		t.Fatal("expected error for invalid terminal.color")
+	}
+	if !strings.Contains(err.Error(), "terminal.color") {
+		t.Errorf("error should mention terminal.color: %v", err)
 	}
 }
 
@@ -432,36 +438,31 @@ func TestValidate_NegativeInts(t *testing.T) {
 	cfg.Behavior.MaxRetries = 0
 	cfg.Behavior.MaxToolCalls = -1
 	cfg.Behavior.MaxMemories = -5
+	cfg.Behavior.MaxConversationEntries = 0
 	cfg.Behavior.MaxContext = 0
 	cfg.Behavior.MaxHistoryResults = -1
 	cfg.Behavior.ScreenCaptureMaxLines = 0
 	cfg.Profile.RebuildInterval = -100
-	cfg.validate()
+	err := cfg.validate()
 
-	def := DefaultConfig()
-	if cfg.Model.MaxTokens != def.Model.MaxTokens {
-		t.Errorf("max_tokens: want %d, got %d", def.Model.MaxTokens, cfg.Model.MaxTokens)
+	if err == nil {
+		t.Fatal("expected error for negative/zero int fields")
 	}
-	if cfg.Behavior.MaxRetries != def.Behavior.MaxRetries {
-		t.Errorf("max_retries: want %d, got %d", def.Behavior.MaxRetries, cfg.Behavior.MaxRetries)
-	}
-	if cfg.Behavior.MaxToolCalls != def.Behavior.MaxToolCalls {
-		t.Errorf("max_tool_calls: want %d, got %d", def.Behavior.MaxToolCalls, cfg.Behavior.MaxToolCalls)
-	}
-	if cfg.Behavior.MaxMemories != def.Behavior.MaxMemories {
-		t.Errorf("max_memories: want %d, got %d", def.Behavior.MaxMemories, cfg.Behavior.MaxMemories)
-	}
-	if cfg.Behavior.MaxContext != def.Behavior.MaxContext {
-		t.Errorf("max_context: want %d, got %d", def.Behavior.MaxContext, cfg.Behavior.MaxContext)
-	}
-	if cfg.Behavior.MaxHistoryResults != def.Behavior.MaxHistoryResults {
-		t.Errorf("max_history_results: want %d, got %d", def.Behavior.MaxHistoryResults, cfg.Behavior.MaxHistoryResults)
-	}
-	if cfg.Behavior.ScreenCaptureMaxLines != def.Behavior.ScreenCaptureMaxLines {
-		t.Errorf("screen_capture_max_lines: want %d, got %d", def.Behavior.ScreenCaptureMaxLines, cfg.Behavior.ScreenCaptureMaxLines)
-	}
-	if cfg.Profile.RebuildInterval != def.Profile.RebuildInterval {
-		t.Errorf("rebuild_interval: want %d, got %d", def.Profile.RebuildInterval, cfg.Profile.RebuildInterval)
+
+	for _, field := range []string{
+		"model.max_tokens",
+		"behavior.max_retries",
+		"behavior.max_tool_calls",
+		"behavior.max_memories",
+		"behavior.max_conversation_entries",
+		"behavior.max_context",
+		"behavior.max_history_results",
+		"behavior.screen_capture_max_lines",
+		"profile.rebuild_interval",
+	} {
+		if !strings.Contains(err.Error(), field) {
+			t.Errorf("error should mention %s: %v", field, err)
+		}
 	}
 }
 
@@ -471,23 +472,20 @@ func TestValidate_ValidValues(t *testing.T) {
 	cfg.Terminal.Color = "256"
 	cfg.Model.MaxTokens = 4096
 	cfg.Behavior.MaxRetries = 5
-	cfg.validate()
 
-	if cfg.LogLevel != "debug" {
-		t.Errorf("valid log_level changed: got %q", cfg.LogLevel)
-	}
-	if cfg.Terminal.Color != "256" {
-		t.Errorf("valid terminal.color changed: got %q", cfg.Terminal.Color)
-	}
-	if cfg.Model.MaxTokens != 4096 {
-		t.Errorf("valid max_tokens changed: got %d", cfg.Model.MaxTokens)
-	}
-	if cfg.Behavior.MaxRetries != 5 {
-		t.Errorf("valid max_retries changed: got %d", cfg.Behavior.MaxRetries)
+	if err := cfg.validate(); err != nil {
+		t.Errorf("expected no error for valid config, got: %v", err)
 	}
 }
 
-func TestLoadConfig_ValidatesValues(t *testing.T) {
+func TestValidate_DefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	if err := cfg.validate(); err != nil {
+		t.Errorf("default config should be valid, got: %v", err)
+	}
+}
+
+func TestLoadConfig_RejectsInvalidValues(t *testing.T) {
 	dir := t.TempDir()
 	tashDir := filepath.Join(dir, "tash")
 	_ = os.MkdirAll(tashDir, 0755)
@@ -504,22 +502,14 @@ behavior:
 `
 	_ = os.WriteFile(filepath.Join(tashDir, "config.yaml"), []byte(configContent), 0644)
 
-	cfg, err := LoadConfig()
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
+	_, err := LoadConfig()
+	if err == nil {
+		t.Fatal("expected LoadConfig to return error for invalid config")
 	}
-
-	if cfg.LogLevel != "info" {
-		t.Errorf("expected log_level reset to info, got %q", cfg.LogLevel)
-	}
-	if cfg.Terminal.Color != "auto" {
-		t.Errorf("expected terminal.color reset to auto, got %q", cfg.Terminal.Color)
-	}
-	if cfg.Model.MaxTokens != 2048 {
-		t.Errorf("expected max_tokens reset to 2048, got %d", cfg.Model.MaxTokens)
-	}
-	if cfg.Behavior.MaxRetries != 3 {
-		t.Errorf("expected max_retries reset to 3, got %d", cfg.Behavior.MaxRetries)
+	for _, field := range []string{"log_level", "terminal.color", "model.max_tokens", "behavior.max_retries"} {
+		if !strings.Contains(err.Error(), field) {
+			t.Errorf("error should mention %s: %v", field, err)
+		}
 	}
 }
 

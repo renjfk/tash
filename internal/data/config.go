@@ -121,47 +121,54 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
-	cfg.validate()
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
-// validate resets any invalid config values to their defaults.
-func (c *Config) validate() {
-	def := DefaultConfig()
+// validate checks config values and returns an error describing all invalid fields.
+func (c *Config) validate() error {
+	var errs []string
 
 	if !isValid(c.LogLevel, logLevels) {
-		c.LogLevel = def.LogLevel
+		errs = append(errs, fmt.Sprintf("log_level: %q is not valid (options: %s)", c.LogLevel, strings.Join(logLevels, ", ")))
 	}
 	if !isValid(c.Terminal.Color, terminalColors) {
-		c.Terminal.Color = def.Terminal.Color
+		errs = append(errs, fmt.Sprintf("terminal.color: %q is not valid (options: %s)", c.Terminal.Color, strings.Join(terminalColors, ", ")))
 	}
 	if c.Model.MaxTokens <= 0 {
-		c.Model.MaxTokens = def.Model.MaxTokens
+		errs = append(errs, fmt.Sprintf("model.max_tokens: must be positive, got %d", c.Model.MaxTokens))
 	}
 	if c.Behavior.MaxRetries <= 0 {
-		c.Behavior.MaxRetries = def.Behavior.MaxRetries
+		errs = append(errs, fmt.Sprintf("behavior.max_retries: must be positive, got %d", c.Behavior.MaxRetries))
 	}
 	if c.Behavior.MaxToolCalls <= 0 {
-		c.Behavior.MaxToolCalls = def.Behavior.MaxToolCalls
+		errs = append(errs, fmt.Sprintf("behavior.max_tool_calls: must be positive, got %d", c.Behavior.MaxToolCalls))
 	}
 	if c.Behavior.MaxMemories <= 0 {
-		c.Behavior.MaxMemories = def.Behavior.MaxMemories
+		errs = append(errs, fmt.Sprintf("behavior.max_memories: must be positive, got %d", c.Behavior.MaxMemories))
 	}
 	if c.Behavior.MaxConversationEntries <= 0 {
-		c.Behavior.MaxConversationEntries = def.Behavior.MaxConversationEntries
+		errs = append(errs, fmt.Sprintf("behavior.max_conversation_entries: must be positive, got %d", c.Behavior.MaxConversationEntries))
 	}
 	if c.Behavior.MaxContext <= 0 {
-		c.Behavior.MaxContext = def.Behavior.MaxContext
+		errs = append(errs, fmt.Sprintf("behavior.max_context: must be positive, got %d", c.Behavior.MaxContext))
 	}
 	if c.Behavior.MaxHistoryResults <= 0 {
-		c.Behavior.MaxHistoryResults = def.Behavior.MaxHistoryResults
+		errs = append(errs, fmt.Sprintf("behavior.max_history_results: must be positive, got %d", c.Behavior.MaxHistoryResults))
 	}
 	if c.Behavior.ScreenCaptureMaxLines <= 0 {
-		c.Behavior.ScreenCaptureMaxLines = def.Behavior.ScreenCaptureMaxLines
+		errs = append(errs, fmt.Sprintf("behavior.screen_capture_max_lines: must be positive, got %d", c.Behavior.ScreenCaptureMaxLines))
 	}
 	if c.Profile.RebuildInterval <= 0 {
-		c.Profile.RebuildInterval = def.Profile.RebuildInterval
+		errs = append(errs, fmt.Sprintf("profile.rebuild_interval: must be positive, got %d", c.Profile.RebuildInterval))
 	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("invalid config:\n  %s", strings.Join(errs, "\n  "))
+	}
+	return nil
 }
 
 var logLevels = []string{"debug", "info", "warn", "error"}

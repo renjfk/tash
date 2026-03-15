@@ -361,7 +361,7 @@ func TestLoadConversation(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
-	convo, err := LoadConversation(dir, 0, 50)
+	convo, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestLoadConversation(t *testing.T) {
 
 func TestLoadConversation_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadConversation(dir, 0, 50)
+	_, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -394,7 +394,7 @@ func TestSaveConversation(t *testing.T) {
 	}
 
 	// Load it back
-	loaded, err := LoadConversation(dir, 0, 50)
+	loaded, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestSaveConversation_OnlyNewEntries(t *testing.T) {
 	_ = convo.Save(dir)
 
 	// Load and verify only 2 entries total (not duplicated)
-	loaded, _ := LoadConversation(dir, 0, 50)
+	loaded, _ := LoadConversation(dir, defaultMaxEntries, 50)
 	if len(loaded.Entries) != 2 {
 		t.Errorf("expected 2 entries (no duplicates), got %d", len(loaded.Entries))
 	}
@@ -450,7 +450,7 @@ func TestResetConversation(t *testing.T) {
 	}
 
 	// Only memories should remain
-	convo, err := LoadConversation(dir, 0, 50)
+	convo, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation after reset: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestLoadMoreContext(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
 	// Load with small maxEntries initially (default loads maxEntries+maxMemories=300, but we only have 20)
-	convo, err := LoadConversation(dir, 0, 5)
+	convo, err := LoadConversation(dir, defaultMaxEntries, 5)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -591,7 +591,7 @@ func TestLoadMoreContext_MaxTotalCap(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
-	convo, err := LoadConversation(dir, 0, 5)
+	convo, err := LoadConversation(dir, defaultMaxEntries, 5)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -619,7 +619,7 @@ func TestSaveAtCapacity(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
 	// Load the full conversation — savedCount should be defaultMaxEntries
-	convo, err := LoadConversation(dir, 0, 50)
+	convo, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -637,7 +637,7 @@ func TestSaveAtCapacity(t *testing.T) {
 	}
 
 	// Reload and verify the new entries are on disk
-	loaded, err := LoadConversation(dir, 0, 50)
+	loaded, err := LoadConversation(dir, defaultMaxEntries, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation after save: %v", err)
 	}

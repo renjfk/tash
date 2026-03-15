@@ -222,9 +222,9 @@ func TestHasTerminalResponse_ScreenIsNotTerminal(t *testing.T) {
 	}
 }
 
-func TestCaptureScreen_DefaultLines(t *testing.T) {
-	// Verify that lines=0 defaults to 20 (tested via the no-zellij path
-	// which still exercises the lines normalization)
+func TestCaptureScreen_ZeroLines(t *testing.T) {
+	// lines=0 is handled gracefully (defaults are set at AI parse time;
+	// explicit 0 from AI means the no-zellij path still returns cleanly)
 	cfg := data.DefaultConfig()
 	cfg.Behavior.ScreenCapture = true
 	t.Setenv("ZELLIJ", "")

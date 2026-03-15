@@ -305,10 +305,6 @@ func handleResponses(
 // loadMoreContext loads additional older conversation entries and returns them
 // formatted as a constraint string for the AI.
 func loadMoreContext(cfg *data.Config, convo *data.Conversation, count int) string {
-	if count <= 0 {
-		count = 50
-	}
-
 	loaded, err := convo.LoadMoreContext(count, cfg.Behavior.MaxContext)
 	if err != nil {
 		slog.Warn("load more context", "error", err)
@@ -376,9 +372,6 @@ func searchContext(
 	}
 
 	// Cap to requested count
-	if count <= 0 {
-		count = 50
-	}
 	if len(extra) > count {
 		extra = extra[len(extra)-count:]
 	}

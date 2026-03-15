@@ -382,8 +382,8 @@ func TestSearchContext_DefaultCount(t *testing.T) {
 
 	convo := data.NewConversation()
 
-	// count=0 should default to 50
-	result := searchContext(cfg, convo, nil, "", 0)
+	// count defaults to 50 at AI response parse time; verify normal call works
+	result := searchContext(cfg, convo, nil, "", 50)
 	// Should not crash and should return something
 	if result == "" {
 		t.Error("expected non-empty result")
@@ -548,7 +548,7 @@ func TestHandleResponses_ContextRequest(t *testing.T) {
 	cfg := data.DefaultConfig()
 	cfg.SetDataDir(dir)
 
-	convo, _ := data.LoadConversation(dir, 0, 50)
+	convo, _ := data.LoadConversation(dir, 250, 50)
 	if convo == nil {
 		convo = data.NewConversation()
 	}

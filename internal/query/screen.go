@@ -27,14 +27,7 @@ func captureScreen(cfg *data.Config, lines int) string {
 		return "Not running inside Zellij — screen capture unavailable"
 	}
 
-	if lines <= 0 {
-		lines = 20
-	}
-
 	maxLines := cfg.Behavior.ScreenCaptureMaxLines
-	if maxLines <= 0 {
-		maxLines = 200
-	}
 	if lines > maxLines {
 		lines = maxLines
 	}

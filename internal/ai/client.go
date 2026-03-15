@@ -49,10 +49,10 @@ type TashResponse struct {
 	Type           string   `json:"type"`                      // "command", "chat", "history", "memory", "plan", "screen", "context"
 	Commands       []string `json:"commands,omitempty"`        // for type "command" or "plan"
 	Message        string   `json:"message,omitempty"`         // explanation, chat text, or memory fact
-	Count          int      `json:"count,omitempty"`           // for type "history" or "context": how many entries
+	Count          int      `json:"count,omitempty"`           // for type "history" or "context": how many entries (default 50)
 	Filter         string   `json:"filter,omitempty"`          // for type "history": grep filter
 	StepsRemaining int      `json:"steps_remaining,omitempty"` // for type "plan": estimated remaining steps
-	Lines          int      `json:"lines,omitempty"`           // for type "screen": how many lines to capture
+	Lines          int      `json:"lines,omitempty"`           // for type "screen": how many lines to capture (default 20)
 }
 
 // NewClient creates an AI client from config.
@@ -83,14 +83,9 @@ func (c *Client) Complete(req Request) (*Response, error) {
 		messages = append(messages, chatMessage(m))
 	}
 
-	maxTokens := c.cfg.Model.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = 2048
-	}
-
 	body := chatRequest{
 		Model:     req.Model,
-		MaxTokens: maxTokens,
+		MaxTokens: c.cfg.Model.MaxTokens,
 		Messages:  messages,
 	}
 
@@ -178,7 +173,7 @@ func ParseResponse(raw string) ([]TashResponse, error) {
 		if line == "" {
 			continue
 		}
-		var resp TashResponse
+		resp := TashResponse{Count: 50, Lines: 20}
 		if err := json.Unmarshal([]byte(line), &resp); err != nil {
 			// Retry with sanitized JSON escapes if it looks like JSON
 			if len(line) > 0 && line[0] == '{' {

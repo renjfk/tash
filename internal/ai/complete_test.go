@@ -183,7 +183,7 @@ func TestComplete_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestComplete_DefaultMaxTokens(t *testing.T) {
+func TestComplete_UsesConfigMaxTokens(t *testing.T) {
 	var receivedBody chatRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +196,7 @@ func TestComplete_DefaultMaxTokens(t *testing.T) {
 
 	cfg := data.DefaultConfig()
 	cfg.Model.Endpoint = server.URL
-	cfg.Model.MaxTokens = 0 // should default to 2048
+	cfg.Model.MaxTokens = 4096
 	cfg.Model.APIKeyEnv = "TEST_TASH_API_KEY"
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
@@ -206,8 +206,8 @@ func TestComplete_DefaultMaxTokens(t *testing.T) {
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
 
-	if receivedBody.MaxTokens != 2048 {
-		t.Errorf("expected default max_tokens 2048, got %d", receivedBody.MaxTokens)
+	if receivedBody.MaxTokens != 4096 {
+		t.Errorf("expected max_tokens 4096 from config, got %d", receivedBody.MaxTokens)
 	}
 }
 

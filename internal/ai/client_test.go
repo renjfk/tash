@@ -86,6 +86,63 @@ func TestParseResponse_HistoryRequest(t *testing.T) {
 	}
 }
 
+func TestParseResponse_DefaultCount(t *testing.T) {
+	raw := `{"type": "history", "filter": "docker"}`
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if responses[0].Count != 50 {
+		t.Errorf("expected default count 50, got %d", responses[0].Count)
+	}
+}
+
+func TestParseResponse_DefaultLines(t *testing.T) {
+	raw := `{"type": "screen"}`
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if responses[0].Lines != 20 {
+		t.Errorf("expected default lines 20, got %d", responses[0].Lines)
+	}
+}
+
+func TestParseResponse_ExplicitCountOverridesDefault(t *testing.T) {
+	raw := `{"type": "context", "count": 100}`
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if responses[0].Count != 100 {
+		t.Errorf("expected count 100, got %d", responses[0].Count)
+	}
+}
+
+func TestParseResponse_ExplicitZeroOverridesDefault(t *testing.T) {
+	raw := `{"type": "history", "count": 0}`
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Explicit 0 from AI overrides the default — this is intentional.
+	// Downstream functions handle 0 gracefully (empty results).
+	if responses[0].Count != 0 {
+		t.Errorf("expected explicit 0 to override default, got %d", responses[0].Count)
+	}
+}
+
+func TestParseResponse_ExplicitLinesOverridesDefault(t *testing.T) {
+	raw := `{"type": "screen", "lines": 50}`
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if responses[0].Lines != 50 {
+		t.Errorf("expected lines 50, got %d", responses[0].Lines)
+	}
+}
+
 func TestParseResponse_JSONL(t *testing.T) {
 	raw := `{"type": "memory", "message": "User likes Go"}
 {"type": "chat", "message": "Got it!"}`
