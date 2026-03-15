@@ -46,6 +46,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if os.Args[1] == "--help" || os.Args[1] == "-h" {
+		fmt.Println(usageText)
+		return
+	}
+
 	cfg, err := data.LoadConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tash: config error: %v\n", err)
