@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	stateFile  = "conversation.jsonl"
-	maxEntries = 250
+	stateFile          = "conversation.jsonl"
+	defaultMaxEntries  = 250
+	defaultMaxMemories = 50
 )
 
 // Entry represents a single event in the conversation timeline.
@@ -42,6 +43,7 @@ type Conversation struct {
 	Entries     []Entry
 	session     string
 	dataDir     string // for loading more context on demand
+	maxEntries  int
 	maxMemories int
 	maxLoaded   int // total lines loaded from disk so far
 	savedCount  int // number of entries already persisted on disk
@@ -51,7 +53,8 @@ type Conversation struct {
 func NewConversation() *Conversation {
 	return &Conversation{
 		Entries:     []Entry{},
-		maxMemories: 50,
+		maxEntries:  defaultMaxEntries,
+		maxMemories: defaultMaxMemories,
 	}
 }
 
@@ -63,13 +66,16 @@ func (s *Conversation) SetSession(session string) {
 // LoadConversation reads conversation state from disk as JSONL.
 // Reads the file backwards to avoid loading the entire file into memory,
 // keeping only the last maxEntries ephemeral entries plus up to maxMemories memories.
-func LoadConversation(dataDir string, maxMemories int) (*Conversation, error) {
+func LoadConversation(dataDir string, maxEntries int, maxMemories int) (*Conversation, error) {
 	path := filepath.Join(dataDir, stateFile)
 
-	if maxMemories <= 0 {
-		maxMemories = 50
+	if maxEntries <= 0 {
+		maxEntries = defaultMaxEntries
 	}
-	state := &Conversation{maxMemories: maxMemories, dataDir: dataDir}
+	if maxMemories <= 0 {
+		maxMemories = defaultMaxMemories
+	}
+	state := &Conversation{maxEntries: maxEntries, maxMemories: maxMemories, dataDir: dataDir}
 
 	loadCount := maxEntries + maxMemories
 	lines, err := readLinesReverse(path, loadCount)
@@ -229,7 +235,7 @@ func lastIndexByte(b []byte, c byte) int {
 func ResetConversation(dataDir string) error {
 	path := filepath.Join(dataDir, stateFile)
 
-	lines, err := readLinesReverse(path, maxEntries+50)
+	lines, err := readLinesReverse(path, defaultMaxEntries+defaultMaxMemories)
 	if err != nil {
 		return nil //nolint:nilerr // file doesn't exist — nothing to reset
 	}
@@ -559,7 +565,8 @@ func (s *Conversation) Search(filter string, count int) []string {
 func (s *Conversation) trim() {
 	s.trimMemories()
 
-	if len(s.Entries) > maxEntries {
+	if len(s.Entries) > s.maxEntries {
+		before := len(s.Entries)
 		var memories []Entry
 		var ephemeral []Entry
 		for _, e := range s.Entries {
@@ -569,7 +576,7 @@ func (s *Conversation) trim() {
 				ephemeral = append(ephemeral, e)
 			}
 		}
-		keep := maxEntries - len(memories)
+		keep := s.maxEntries - len(memories)
 		if keep < 0 {
 			keep = 0
 		}
@@ -577,6 +584,11 @@ func (s *Conversation) trim() {
 			ephemeral = ephemeral[len(ephemeral)-keep:]
 		}
 		s.Entries = append(memories, ephemeral...)
+		dropped := before - len(s.Entries)
+		s.savedCount -= dropped
+		if s.savedCount < 0 {
+			s.savedCount = 0
+		}
 	}
 }
 
@@ -591,14 +603,18 @@ func (s *Conversation) trimMemories() {
 		return
 	}
 
-	drop := count - s.maxMemories
-	filtered := make([]Entry, 0, len(s.Entries)-drop)
+	dropped := count - s.maxMemories
+	filtered := make([]Entry, 0, len(s.Entries)-dropped)
 	for _, e := range s.Entries {
-		if e.Type == "memory" && drop > 0 {
-			drop--
+		if e.Type == "memory" && dropped > 0 {
+			dropped--
 			continue
 		}
 		filtered = append(filtered, e)
 	}
 	s.Entries = filtered
+	s.savedCount -= count - s.maxMemories
+	if s.savedCount < 0 {
+		s.savedCount = 0
+	}
 }

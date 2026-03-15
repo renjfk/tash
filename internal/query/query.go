@@ -33,7 +33,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 
 	// Collect context
 	shellHistory := convo.RecentShellCommands(10)
-	systemPrompt := buildSystemPrompt(prof, convo)
+	systemPrompt := buildSystemPrompt(cfg, prof, convo)
 
 	slog.Debug(
 		"query start",
@@ -420,7 +420,7 @@ func buildMessages(
 	return messages
 }
 
-func buildSystemPrompt(prof *data.Profile, convo *data.Conversation) string {
+func buildSystemPrompt(cfg *data.Config, prof *data.Profile, convo *data.Conversation) string {
 	var b strings.Builder
 
 	b.WriteString(ai.SystemPrompt)
@@ -429,6 +429,9 @@ func buildSystemPrompt(prof *data.Profile, convo *data.Conversation) string {
 	fmt.Fprintf(&b, "tash version: %s\n", Version)
 	now := time.Now()
 	fmt.Fprintf(&b, "Current time: %s (%s)\n", data.FormatTimestamp(now.Unix()), now.Format("MST"))
+	if cfg.Terminal.ASCII {
+		b.WriteString("Terminal: ASCII-only (TTY/framebuffer console). Do NOT use emojis or Unicode symbols — they will render as garbage. ASCII art is fine.\n")
+	}
 
 	if prof != nil {
 		b.WriteString("\n--- User Profile ---\n")

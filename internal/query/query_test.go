@@ -105,8 +105,9 @@ func TestBuildMessages_ReplacesLastUserMessage(t *testing.T) {
 }
 
 func TestBuildSystemPrompt_NoProfile(t *testing.T) {
+	cfg := &data.Config{}
 	convo := data.NewConversation()
-	got := buildSystemPrompt(nil, convo)
+	got := buildSystemPrompt(cfg, nil, convo)
 
 	if !strings.Contains(got, ai.SystemPrompt) {
 		t.Error("expected base system prompt")
@@ -126,9 +127,10 @@ func TestBuildSystemPrompt_NoProfile(t *testing.T) {
 }
 
 func TestBuildSystemPrompt_WithProfile(t *testing.T) {
+	cfg := &data.Config{}
 	prof := &data.Profile{Content: "## Tools\n- docker\n- kubectl"}
 	convo := data.NewConversation()
-	got := buildSystemPrompt(prof, convo)
+	got := buildSystemPrompt(cfg, prof, convo)
 
 	if !strings.Contains(got, "User Profile") {
 		t.Error("expected profile section header")
@@ -139,15 +141,40 @@ func TestBuildSystemPrompt_WithProfile(t *testing.T) {
 }
 
 func TestBuildSystemPrompt_WithMemories(t *testing.T) {
+	cfg := &data.Config{}
 	convo := data.NewConversation()
 	convo.AddMemory("User is John, backend engineer")
 
-	got := buildSystemPrompt(nil, convo)
+	got := buildSystemPrompt(cfg, nil, convo)
 
 	if !strings.Contains(got, "Memories") {
 		t.Error("expected memories section header")
 	}
 	if !strings.Contains(got, "John") {
 		t.Error("expected memory content")
+	}
+}
+
+func TestBuildSystemPrompt_ASCIIMode(t *testing.T) {
+	cfg := &data.Config{}
+	cfg.Terminal.ASCII = true
+	convo := data.NewConversation()
+	got := buildSystemPrompt(cfg, nil, convo)
+
+	if !strings.Contains(got, "Do NOT use emojis") {
+		t.Error("expected emoji restriction in ASCII mode")
+	}
+	if !strings.Contains(got, "ASCII art is fine") {
+		t.Error("expected ASCII art to be allowed")
+	}
+}
+
+func TestBuildSystemPrompt_NonASCIIMode(t *testing.T) {
+	cfg := &data.Config{}
+	convo := data.NewConversation()
+	got := buildSystemPrompt(cfg, nil, convo)
+
+	if strings.Contains(got, "Do NOT use emojis") {
+		t.Error("should not contain emoji restriction when not in ASCII mode")
 	}
 }

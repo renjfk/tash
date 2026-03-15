@@ -118,7 +118,7 @@ func runQuery(cfg *data.Config, input string, session string, outputFile string)
 		data.Warn("no profile found, run 'tash init' first")
 	}
 
-	convo, err := data.LoadConversation(cfg.DataDir(), cfg.Behavior.MaxMemories)
+	convo, err := data.LoadConversation(cfg.DataDir(), cfg.Behavior.MaxConversationEntries, cfg.Behavior.MaxMemories)
 	if err != nil {
 		convo = data.NewConversation()
 	}

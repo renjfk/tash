@@ -223,8 +223,8 @@ func TestTrim(t *testing.T) {
 
 	c.trim()
 
-	if len(c.Entries) > maxEntries {
-		t.Errorf("expected at most %d entries, got %d", maxEntries, len(c.Entries))
+	if len(c.Entries) > defaultMaxEntries {
+		t.Errorf("expected at most %d entries, got %d", defaultMaxEntries, len(c.Entries))
 	}
 
 	// Memory should be preserved
@@ -361,7 +361,7 @@ func TestLoadConversation(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
-	convo, err := LoadConversation(dir, 50)
+	convo, err := LoadConversation(dir, 0, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestLoadConversation(t *testing.T) {
 
 func TestLoadConversation_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadConversation(dir, 50)
+	_, err := LoadConversation(dir, 0, 50)
 	if err == nil {
 		t.Error("expected error for missing file")
 	}
@@ -394,7 +394,7 @@ func TestSaveConversation(t *testing.T) {
 	}
 
 	// Load it back
-	loaded, err := LoadConversation(dir, 50)
+	loaded, err := LoadConversation(dir, 0, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestSaveConversation_OnlyNewEntries(t *testing.T) {
 	_ = convo.Save(dir)
 
 	// Load and verify only 2 entries total (not duplicated)
-	loaded, _ := LoadConversation(dir, 50)
+	loaded, _ := LoadConversation(dir, 0, 50)
 	if len(loaded.Entries) != 2 {
 		t.Errorf("expected 2 entries (no duplicates), got %d", len(loaded.Entries))
 	}
@@ -450,7 +450,7 @@ func TestResetConversation(t *testing.T) {
 	}
 
 	// Only memories should remain
-	convo, err := LoadConversation(dir, 50)
+	convo, err := LoadConversation(dir, 0, 50)
 	if err != nil {
 		t.Fatalf("LoadConversation after reset: %v", err)
 	}
@@ -550,7 +550,7 @@ func TestLoadMoreContext(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
 	// Load with small maxEntries initially (default loads maxEntries+maxMemories=300, but we only have 20)
-	convo, err := LoadConversation(dir, 5)
+	convo, err := LoadConversation(dir, 0, 5)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -591,7 +591,7 @@ func TestLoadMoreContext_MaxTotalCap(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
 
-	convo, err := LoadConversation(dir, 5)
+	convo, err := LoadConversation(dir, 0, 5)
 	if err != nil {
 		t.Fatalf("LoadConversation: %v", err)
 	}
@@ -603,6 +603,91 @@ func TestLoadMoreContext_MaxTotalCap(t *testing.T) {
 	}
 	if loaded != 0 {
 		t.Errorf("expected 0 loaded when at max, got %d", loaded)
+	}
+}
+
+func TestSaveAtCapacity(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write exactly defaultMaxEntries entries to disk
+	var b strings.Builder
+	for i := 0; i < defaultMaxEntries; i++ {
+		data, _ := json.Marshal(Entry{Type: "query", Content: "old", Time: int64(i + 1)})
+		b.Write(data)
+		b.WriteByte('\n')
+	}
+	_ = os.WriteFile(filepath.Join(dir, stateFile), []byte(b.String()), 0644)
+
+	// Load the full conversation — savedCount should be defaultMaxEntries
+	convo, err := LoadConversation(dir, 0, 50)
+	if err != nil {
+		t.Fatalf("LoadConversation: %v", err)
+	}
+	if len(convo.Entries) != defaultMaxEntries {
+		t.Fatalf("expected %d entries, got %d", defaultMaxEntries, len(convo.Entries))
+	}
+
+	// Simulate a query+response cycle (same as query.Run does)
+	convo.AddQuery("new question")
+	convo.AddChatResponse("new answer", "req1", 100, 50)
+
+	// Save should write the new entries even though trim kept the count at maxEntries
+	if err := convo.Save(dir); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Reload and verify the new entries are on disk
+	loaded, err := LoadConversation(dir, 0, 50)
+	if err != nil {
+		t.Fatalf("LoadConversation after save: %v", err)
+	}
+
+	// The last two entries should be our new query and chat
+	last := loaded.Entries[len(loaded.Entries)-1]
+	secondLast := loaded.Entries[len(loaded.Entries)-2]
+	if secondLast.Type != "query" || secondLast.Content != "new question" {
+		t.Errorf("expected second-to-last entry to be new query, got type=%q content=%q", secondLast.Type, secondLast.Content)
+	}
+	if last.Type != "chat" || last.Content != "new answer" {
+		t.Errorf("expected last entry to be new chat, got type=%q content=%q", last.Type, last.Content)
+	}
+}
+
+func TestTrimAdjustsSavedCount(t *testing.T) {
+	c := NewConversation()
+	c.maxMemories = 50
+
+	// Fill to capacity
+	for i := 0; i < defaultMaxEntries; i++ {
+		c.Entries = append(c.Entries, Entry{Type: "query", Content: "old", Time: int64(i)})
+	}
+	c.savedCount = defaultMaxEntries
+
+	// Add a new entry — trim should fire and drop one old entry
+	c.AddQuery("new")
+
+	// savedCount should have been decremented so Save() knows there's something new
+	if c.savedCount >= len(c.Entries) {
+		t.Errorf("savedCount (%d) should be less than len(Entries) (%d) after trim+add", c.savedCount, len(c.Entries))
+	}
+}
+
+func TestTrimMemoriesAdjustsSavedCount(t *testing.T) {
+	c := NewConversation()
+	c.maxMemories = 3
+
+	// Pre-fill with memories at capacity
+	for i := 0; i < 3; i++ {
+		c.Entries = append(c.Entries, Entry{Type: "memory", Content: "old fact"})
+	}
+	c.Entries = append(c.Entries, Entry{Type: "query", Content: "q"})
+	c.savedCount = 4
+
+	// Add a memory — trimMemories should drop one old memory
+	c.AddMemory("new fact")
+
+	if c.savedCount >= len(c.Entries) {
+		t.Errorf("savedCount (%d) should be less than len(Entries) (%d) after trimMemories+add", c.savedCount, len(c.Entries))
 	}
 }
 

@@ -548,7 +548,7 @@ func TestHandleResponses_ContextRequest(t *testing.T) {
 	cfg := data.DefaultConfig()
 	cfg.SetDataDir(dir)
 
-	convo, _ := data.LoadConversation(dir, 50)
+	convo, _ := data.LoadConversation(dir, 0, 50)
 	if convo == nil {
 		convo = data.NewConversation()
 	}

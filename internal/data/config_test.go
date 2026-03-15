@@ -39,6 +39,9 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.Behavior.ScreenCapture {
 		t.Error("expected screen_capture true")
 	}
+	if cfg.Behavior.MaxConversationEntries != 250 {
+		t.Errorf("expected 250 max_conversation_entries, got %d", cfg.Behavior.MaxConversationEntries)
+	}
 	if cfg.Behavior.MaxContext != 500 {
 		t.Errorf("expected 500 max_context, got %d", cfg.Behavior.MaxContext)
 	}

@@ -112,13 +112,13 @@ func TestAddChatResponse_Trims(t *testing.T) {
 	c := NewConversation()
 	c.maxMemories = 50
 
-	// Add more than maxEntries
-	for i := 0; i < maxEntries+10; i++ {
+	// Add more than defaultMaxEntries
+	for i := 0; i < defaultMaxEntries+10; i++ {
 		c.AddChatResponse("msg", "req", 0, 0)
 	}
 
-	if len(c.Entries) > maxEntries {
-		t.Errorf("expected at most %d entries after trim, got %d", maxEntries, len(c.Entries))
+	if len(c.Entries) > defaultMaxEntries {
+		t.Errorf("expected at most %d entries after trim, got %d", defaultMaxEntries, len(c.Entries))
 	}
 }
 
