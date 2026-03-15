@@ -436,6 +436,22 @@ func (s *Conversation) RecentShellCommands() []ShellCommand {
 	return cmds
 }
 
+// MemoryCount returns the number of stored memory entries.
+func (s *Conversation) MemoryCount() int {
+	var count int
+	for _, e := range s.Entries {
+		if e.Type == "memory" {
+			count++
+		}
+	}
+	return count
+}
+
+// MaxMemories returns the configured memory cap.
+func (s *Conversation) MaxMemories() int {
+	return s.maxMemories
+}
+
 // Memories returns all stored memory entries as formatted text.
 func (s *Conversation) Memories() string {
 	var b strings.Builder

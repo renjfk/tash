@@ -130,6 +130,35 @@ func TestMemories_Empty(t *testing.T) {
 	}
 }
 
+func TestMemoryCount(t *testing.T) {
+	c := NewConversation()
+	if c.MemoryCount() != 0 {
+		t.Errorf("expected 0 memories, got %d", c.MemoryCount())
+	}
+
+	c.Entries = []Entry{
+		{Type: "memory", Content: "User is John"},
+		{Type: "shell", Content: "ls"},
+		{Type: "memory", Content: "User prefers Go"},
+	}
+	if c.MemoryCount() != 2 {
+		t.Errorf("expected 2 memories, got %d", c.MemoryCount())
+	}
+}
+
+func TestMaxMemories(t *testing.T) {
+	c := NewConversation()
+	if c.MaxMemories() != 50 {
+		t.Errorf("expected default max 50, got %d", c.MaxMemories())
+	}
+
+	c2 := NewConversation()
+	c2.maxMemories = 10
+	if c2.MaxMemories() != 10 {
+		t.Errorf("expected max 10, got %d", c2.MaxMemories())
+	}
+}
+
 func TestFormatForAI(t *testing.T) {
 	c := NewConversation()
 	c.Entries = []Entry{

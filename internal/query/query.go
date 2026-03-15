@@ -434,7 +434,7 @@ func buildSystemPrompt(cfg *data.Config, prof *data.Profile, convo *data.Convers
 	memories := convo.Memories()
 	if memories != "" {
 		b.WriteString("\n--- Memories ---\n")
-		b.WriteString("Things you've learned about the user from past conversations:\n")
+		fmt.Fprintf(&b, "Things you've learned about the user from past conversations (%d/%d slots used):\n", convo.MemoryCount(), convo.MaxMemories())
 		b.WriteString(memories)
 	}
 

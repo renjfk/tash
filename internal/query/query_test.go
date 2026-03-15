@@ -153,6 +153,9 @@ func TestBuildSystemPrompt_WithMemories(t *testing.T) {
 	if !strings.Contains(got, "John") {
 		t.Error("expected memory content")
 	}
+	if !strings.Contains(got, "1/50 slots used") {
+		t.Errorf("expected memory count in header, got section: %s", got[strings.Index(got, "--- Memories"):strings.Index(got, "--- Memories")+120])
+	}
 }
 
 func TestBuildSystemPrompt_ASCIIMode(t *testing.T) {

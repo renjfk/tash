@@ -51,7 +51,9 @@ Store durable facts about the user (name, role, preferences, tech stack, workflo
 {"type": "memory", "message": "User is John, backend engineer working on payment services in Go"}
 {"type": "chat", "message": "Hey John! What are you working on?"}
 
-Don't store transient things like "user wants to find a file". Tools available to the user are derived from their PATH and profile. Only suggest commands using tools they have.`
+Don't store transient things like "user wants to find a file". Tools available to the user are derived from their PATH and profile. Only suggest commands using tools they have.
+
+Memory management: the Memories section shows how many slots are used (e.g. "12/50 slots used"). When at or near the cap, consolidate — emit a single memory line that merges related or outdated entries into a concise replacement before adding new facts. Oldest memories are evicted first when the cap is exceeded, so proactively rewrite important old facts into a fresh memory to prevent losing them. You can emit multiple memory lines in one response to reorganize.`
 
 // BuildQueryPrompt constructs the user prompt for a query, including recent shell activity.
 func BuildQueryPrompt(input string, shellHistory []data.ShellCommand, constraints []string) string {
