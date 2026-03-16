@@ -483,17 +483,6 @@ func stripShellEscapes(s string) string {
 // the AI knows which commands didn't work.
 // Each entry includes a timestamp prefix so the AI is aware of when events occurred.
 func (s *Conversation) FormatForAI() []AIMessage {
-	// Build set of query contents to skip matching shell entries.
-	// Store both raw and shell-unescaped forms so that fish-escaped
-	// commands (e.g. it\'s) match their unescaped query counterparts.
-	queries := make(map[string]bool)
-	for _, e := range s.Entries {
-		if e.Type == "query" {
-			queries[e.Content] = true
-			queries[stripShellEscapes(e.Content)] = true
-		}
-	}
-
 	var messages []AIMessage
 
 	for _, e := range s.Entries {
