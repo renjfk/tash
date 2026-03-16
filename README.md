@@ -31,6 +31,7 @@ the result directly into your command line buffer for you to review, edit, or ru
 - Searches your history on its own when it needs more context (agentic history lookup)
 - Loads older conversation entries on demand when it needs to look further back
 - Validates suggested commands against your actual PATH before showing them
+- Reads terminal screen content via [Zellij](https://zellij.dev/) when available, so the AI can see error output
 - Handles multi-step tasks with interactive approval for each step
 - Works with any OpenAI-compatible API endpoint
 - Single binary, zero shell startup cost, minimal dependencies
@@ -55,6 +56,7 @@ tash stays in its lane: quick command suggestions and shell-level chat, right wh
 ### Requirements
 
 - [fish shell](https://fishshell.com/)
+- [Zellij](https://zellij.dev/) (optional — enables screen capture so the AI can read terminal output)
 
 ### Homebrew
 

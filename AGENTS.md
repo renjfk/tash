@@ -185,6 +185,11 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
   conversation entries, deduplicated against what's already in the prompt.
 - History search results include timestamps via `data.FormatHistory`. Max results bounded by `max_history_results`
   config (default 200).
+- Screen capture uses Zellij (`zellij action dump-screen`). Detects Zellij via `$ZELLIJ` env var; gracefully
+  returns a message when not running inside Zellij. Initial query injects last 20 visible lines; AI can request
+  more via `{"type": "screen"}` with a `lines` count. Escalates to `--full` (scrollback buffer) when requested
+  lines exceed visible content. Output is stripped of ANSI codes and trailing blanks. Capped by
+  `screen_capture_max_lines` config. Controlled by `behavior.screen_capture` toggle.
 - Update check: piggybacks on the background tick path. Single HTTP GET to GitHub releases API daily, compares remote
   tag against compiled version, writes a flag file (`update_available`) when newer. `tash greet` and `tash query` read
   the flag file and show a one-liner with the inferred upgrade command. `behavior.update_check` (default true) disables
