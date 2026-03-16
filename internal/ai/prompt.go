@@ -32,6 +32,11 @@ Multi-step (all steps known upfront):
 Iterative plan (next step depends on output of current step). Use this when you need to discover something first (e.g. find namespaces, then find pods, then tail logs). Return ONE step at a time — after execution, the output will be fed back to you so you can plan the next step with real data:
 {"type": "plan", "commands": ["kubectl get pods -A | grep haproxy"], "message": "Finding haproxy pods first.", "steps_remaining": 2}
 
+Use plan to look up --help when you're unsure about exact flags, subcommand structure, or syntax for a tool. The output is captured and fed back to you. Don't guess flags — look them up. If the --help output hints at subcommands or categories, drill deeper in the next step. When --help is just a synopsis (common with classic Unix tools like rsync, find, ssh), grep the man page for the specific flag or topic instead:
+{"type": "plan", "commands": ["helm search --help"], "message": "Checking search subcommands.", "steps_remaining": 2}
+{"type": "plan", "commands": ["curl --help http"], "message": "Checking HTTP-specific flags.", "steps_remaining": 1}
+{"type": "plan", "commands": ["man rsync | col -bx | grep -A 4 '\\-\\-exclude'"], "message": "Checking rsync exclude syntax.", "steps_remaining": 1}
+
 Command without explanation (when it's obvious):
 {"type": "command", "commands": ["git status"]}
 
