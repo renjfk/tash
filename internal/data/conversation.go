@@ -502,8 +502,10 @@ func (s *Conversation) FormatForAI() []AIMessage {
 		case "memory":
 			continue
 		case "shell":
-			// Include failed commands (non-zero exit) that aren't tash queries
-			if e.ExitCode != 0 && !queries[e.Content] && !queries[stripShellEscapes(e.Content)] {
+			// Include all failed commands (non-zero exit) so the AI knows what
+			// didn't work — including auto-intercepted ones that also have a
+			// matching query entry.
+			if e.ExitCode != 0 {
 				messages = append(
 					messages, AIMessage{
 						Role:    "user",
