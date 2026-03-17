@@ -64,6 +64,11 @@ func main() {
 
 	tui.ApplyCompat(cfg.Terminal.ASCII, cfg.Terminal.Color)
 	tui.ApplyTheme(cfg.Theme.Name, cfg.Theme.Color)
+	data.SetLogStyler(&data.LogStyler{
+		Warn:   func(s string) string { return tui.WarnStyle.Render(s) },
+		Error:  func(s string) string { return tui.FailStyle.Render(s) },
+		Dimmed: func(s string) string { return tui.TraceStyle.Render(s) },
+	})
 
 	switch os.Args[1] {
 	case "query":

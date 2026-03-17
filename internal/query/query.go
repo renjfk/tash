@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -30,6 +31,10 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 
 	spinner := tui.NewSpinner("Thinking")
 	defer spinner.Stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	watchSpinnerCancel(spinner, cancel)
 
 	// Collect context
 	shellHistory := convo.RecentShellCommands()
@@ -81,6 +86,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 		}
 
 		resp, err := client.Complete(
+			ctx,
 			ai.Request{
 				Model:    cfg.Model.Name,
 				System:   systemPrompt,
@@ -88,6 +94,11 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			},
 		)
 		if err != nil {
+			if ctx.Err() != nil {
+				spinner.Stop()
+				data.Info("cancelled")
+				return "", nil
+			}
 			slog.Error("API error", "attempt", attempt, "error", err)
 			lastErr = err
 			failures++
@@ -158,6 +169,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			stepInfo += "):\n" + output
 			constraints = append(constraints, stepInfo)
 			spinner = tui.NewSpinner("Planning next step")
+			watchSpinnerCancel(spinner, cancel)
 			continue
 		case actionRetry:
 			toolCalls++
@@ -611,6 +623,19 @@ func execCommand(command string) int {
 		return 1
 	}
 	return 0
+}
+
+// watchSpinnerCancel starts a goroutine that calls cancel when the spinner is
+// cancelled by the user (Esc or Ctrl+C). The goroutine exits when either the
+// spinner signals cancellation or the cancel function has already been called.
+func watchSpinnerCancel(spinner *tui.Spinner, cancel context.CancelFunc) {
+	go func() {
+		select {
+		case <-spinner.Cancelled():
+			cancel()
+		case <-spinner.Done():
+		}
+	}()
 }
 
 // showChat displays a chat message on stderr.

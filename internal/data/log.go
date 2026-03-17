@@ -43,21 +43,49 @@ func InitLogger(dataDir string, level string) func() {
 	return func() { f.Close() } //nolint:errcheck
 }
 
+// LogStyler provides styled rendering for user-facing log messages on stderr.
+// The tui package registers a real implementation after theme setup.
+type LogStyler struct {
+	Warn   func(string) string // yellow/warning styling
+	Error  func(string) string // red/error styling
+	Dimmed func(string) string // faint/dimmed styling
+}
+
+var logStyler *LogStyler
+
+// SetLogStyler registers style functions for user-facing log output.
+// Must be called after theme initialization.
+func SetLogStyler(s *LogStyler) {
+	logStyler = s
+}
+
 // Warn prints a warning to stderr and logs it.
 func Warn(msg string) {
-	fmt.Fprintf(os.Stderr, "tash: warning: %s\n", msg)
+	text := "tash: warning: " + msg
+	if logStyler != nil && logStyler.Warn != nil {
+		text = logStyler.Warn(text)
+	}
+	fmt.Fprintln(os.Stderr, text)
 	slog.Warn(msg)
 }
 
 // Error prints an error to stderr and logs it.
 func Error(msg string) {
-	fmt.Fprintf(os.Stderr, "tash: %s\n", msg)
+	text := "tash: " + msg
+	if logStyler != nil && logStyler.Error != nil {
+		text = logStyler.Error(text)
+	}
+	fmt.Fprintln(os.Stderr, text)
 	slog.Error(msg)
 }
 
-// Info prints an info message to stderr and logs it.
+// Info prints a dimmed info message to stderr and logs it.
 func Info(msg string) {
-	fmt.Fprintln(os.Stderr, "tash:", msg)
+	text := "tash: " + msg
+	if logStyler != nil && logStyler.Dimmed != nil {
+		text = logStyler.Dimmed(text)
+	}
+	fmt.Fprintln(os.Stderr, text)
 	slog.Info(msg)
 }
 

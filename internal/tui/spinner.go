@@ -214,11 +214,13 @@ func rgbHex(r, g, b int) string {
 }
 
 type spinnerModel struct {
-	phase    string
-	frame    int
-	cycle    int
-	start    time.Time
-	quitting bool
+	phase         string
+	frame         int
+	cycle         int
+	start         time.Time
+	quitting      bool
+	userCancelled bool
+	cancelSignal  chan<- struct{} // closed on Esc/Ctrl+C to signal cancellation immediately
 }
 
 func (m spinnerModel) Init() tea.Cmd {
@@ -241,9 +243,12 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			m.quitting = true
-			return m, tea.Quit
+		if msg.String() == "ctrl+c" || msg.String() == "esc" {
+			if !m.userCancelled {
+				m.userCancelled = true
+				close(m.cancelSignal)
+			}
+			return m, nil
 		}
 	}
 	return m, nil
@@ -310,15 +315,19 @@ func tick() tea.Cmd {
 
 // Spinner wraps a bubbletea program driving a Knight Rider style animation on stderr.
 type Spinner struct {
-	prog *tea.Program
-	done chan struct{}
+	prog      *tea.Program
+	done      chan struct{}
+	cancelled chan struct{}
 }
 
 // NewSpinner creates and starts a spinner with the given initial phase.
 func NewSpinner(phase string) *Spinner {
+	cancelSignal := make(chan struct{})
+
 	m := spinnerModel{
-		phase: phase,
-		start: time.Now(),
+		phase:        phase,
+		start:        time.Now(),
+		cancelSignal: cancelSignal,
 	}
 
 	prog := tea.NewProgram(
@@ -328,8 +337,9 @@ func NewSpinner(phase string) *Spinner {
 	)
 
 	sp := &Spinner{
-		prog: prog,
-		done: make(chan struct{}),
+		prog:      prog,
+		done:      make(chan struct{}),
+		cancelled: cancelSignal,
 	}
 
 	go func() {
@@ -343,6 +353,17 @@ func NewSpinner(phase string) *Spinner {
 // SetPhase updates the displayed phase label.
 func (s *Spinner) SetPhase(phase string) {
 	s.prog.Send(phaseMsg(phase))
+}
+
+// Cancelled returns a channel that is closed when the user cancels (Esc or Ctrl+C).
+func (s *Spinner) Cancelled() <-chan struct{} {
+	return s.cancelled
+}
+
+// Done returns a channel that is closed when the spinner's bubbletea program exits,
+// regardless of the reason (user cancel or programmatic Stop).
+func (s *Spinner) Done() <-chan struct{} {
+	return s.done
 }
 
 // Stop halts the spinner and clears output.

@@ -32,6 +32,7 @@ var stderrRenderer = lipgloss.NewRenderer(os.Stderr)
 // Styles shared across TUI components.
 var (
 	CmdStyle   = stderrRenderer.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
+	WarnStyle  = stderrRenderer.NewStyle().Foreground(lipgloss.Color("3"))
 	FailStyle  = stderrRenderer.NewStyle().Foreground(lipgloss.Color("1"))
 	TraceStyle = stderrRenderer.NewStyle().Faint(true)
 	hintStyle  = stderrRenderer.NewStyle().Faint(true)

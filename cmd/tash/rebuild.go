@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -31,6 +32,7 @@ func rebuildProfile(cfg *data.Config, input *RebuildInput) (string, error) {
 	userPrompt := buildRebuildUserPrompt(input)
 
 	resp, err := client.Complete(
+		context.Background(),
 		ai.Request{
 			Model:  cfg.Model.Name,
 			System: systemPrompt,

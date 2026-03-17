@@ -33,6 +33,7 @@ the result directly into your command line buffer for you to review, edit, or ru
 - Validates suggested commands against your actual PATH before showing them
 - Reads terminal screen content via [Zellij](https://zellij.dev/) when available, so the AI can see error output
 - Handles multi-step tasks with interactive approval for each step
+- Press Esc to cancel any in-flight AI request and return to the shell immediately
 - Works with any OpenAI-compatible API endpoint
 - Single binary, zero shell startup cost, minimal dependencies
 

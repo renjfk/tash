@@ -150,9 +150,13 @@ fmt.Fprintf(os.Stderr, "tash: warning: something\n")
 
 ### Package conventions
 
-- No `context.Context` passing -- HTTP client uses flat 30s timeout
+- `context.Context` is used for cancellation: `ai.Client.Complete` accepts a context so in-flight HTTP requests
+  can be cancelled (e.g. when the user presses Esc during thinking). Not used for general plumbing -- only for
+  cancellation propagation from the TUI spinner to the HTTP transport.
 - Logging via stdlib `log/slog` -- file output to `tash.log`, levels: debug/info/warn/error
-- User-facing messages: `data.Info/Warn/Error` (writes to both stderr and slog)
+- User-facing messages: `data.Info/Warn/Error` (writes to both stderr and slog). Styled via `data.SetLogStyler`
+  callback registered by `main` after theme setup -- `Info` renders dimmed, `Warn` renders yellow, `Error` renders red.
+  Before theme setup, all output is plain text (graceful fallback).
 - Formatting enforced by `golangci-lint fmt`
 - No interfaces defined -- concrete types throughout
 

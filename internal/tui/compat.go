@@ -100,6 +100,7 @@ func applyColorProfile(mode string) {
 	// but the prompt styles (CmdStyle, etc.) were set at package init and use stderrRenderer.
 	// Re-creating them ensures they honour the forced profile.
 	CmdStyle = stderrRenderer.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
+	WarnStyle = stderrRenderer.NewStyle().Foreground(lipgloss.Color("3"))
 	FailStyle = stderrRenderer.NewStyle().Foreground(lipgloss.Color("1"))
 	TraceStyle = stderrRenderer.NewStyle().Faint(true)
 	hintStyle = stderrRenderer.NewStyle().Faint(true)

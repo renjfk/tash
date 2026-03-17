@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -67,7 +68,8 @@ func NewClient(cfg *data.Config) *Client {
 // Complete sends a request to the AI provider and returns the response.
 // Uses the OpenAI-compatible chat completions API, which works with Anthropic's
 // compatibility layer and any other OpenAI-compatible endpoint (OpenAI, Ollama, etc.).
-func (c *Client) Complete(req Request) (*Response, error) {
+// The context can be used to cancel in-flight requests (e.g. when the user presses Esc).
+func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 	apiKey := c.cfg.APIKey()
 	if apiKey == "" {
 		return nil, fmt.Errorf("API key not set (env: %s)", c.cfg.Model.APIKeyEnv)
@@ -102,7 +104,7 @@ func (c *Client) Complete(req Request) (*Response, error) {
 	)
 
 	endpoint := strings.TrimRight(c.cfg.Model.Endpoint, "/") + "/chat/completions"
-	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewReader(jsonBody))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

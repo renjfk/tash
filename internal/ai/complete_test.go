@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -78,7 +79,7 @@ func TestComplete_Success(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	resp, err := client.Complete(Request{
+	resp, err := client.Complete(context.Background(), Request{
 		Model:  "test-model",
 		System: "You are a helper.",
 		Messages: []Message{
@@ -106,7 +107,7 @@ func TestComplete_NoAPIKey(t *testing.T) {
 	t.Setenv("NONEXISTENT_KEY_FOR_TEST", "")
 
 	client := NewClient(cfg)
-	_, err := client.Complete(Request{
+	_, err := client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
@@ -129,7 +130,7 @@ func TestComplete_APIError(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, err := client.Complete(Request{
+	_, err := client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
@@ -151,7 +152,7 @@ func TestComplete_EmptyChoices(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, err := client.Complete(Request{
+	_, err := client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
@@ -173,7 +174,7 @@ func TestComplete_InvalidJSON(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, err := client.Complete(Request{
+	_, err := client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
@@ -201,7 +202,7 @@ func TestComplete_UsesConfigMaxTokens(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, _ = client.Complete(Request{
+	_, _ = client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
@@ -228,7 +229,7 @@ func TestComplete_NoSystemPrompt(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, _ = client.Complete(Request{
+	_, _ = client.Complete(context.Background(), Request{
 		Model:    "test",
 		System:   "", // no system prompt
 		Messages: []Message{{Role: "user", Content: "hi"}},
@@ -259,12 +260,49 @@ func TestComplete_TrailingSlashEndpoint(t *testing.T) {
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, _ = client.Complete(Request{
+	_, _ = client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
 
 	if requestPath != "/chat/completions" {
 		t.Errorf("expected /chat/completions, got %s (trailing slash not stripped)", requestPath)
+	}
+}
+
+func TestComplete_ContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a slow response
+		select {
+		case <-r.Context().Done():
+			return
+		case <-make(chan struct{}): // never unblocks
+		}
+	}))
+	defer server.Close()
+
+	cfg := data.DefaultConfig()
+	cfg.Model.Endpoint = server.URL
+	cfg.Model.APIKeyEnv = "TEST_TASH_API_KEY"
+	t.Setenv("TEST_TASH_API_KEY", "test-key")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client := NewClient(cfg)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := client.Complete(ctx, Request{
+			Model:    "test",
+			Messages: []Message{{Role: "user", Content: "hi"}},
+		})
+		done <- err
+	}()
+
+	// Cancel after a short delay
+	cancel()
+
+	err := <-done
+	if err == nil {
+		t.Error("expected error on context cancellation")
 	}
 }

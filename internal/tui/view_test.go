@@ -137,17 +137,57 @@ func TestSpinnerModel_Update_Done(t *testing.T) {
 	}
 }
 
-func TestSpinnerModel_Update_CtrlC(t *testing.T) {
-	m := spinnerModel{phase: "Thinking", start: time.Now()}
+func TestSpinnerModel_Update_CancelKeys(t *testing.T) {
+	keys := []struct {
+		name string
+		msg  tea.KeyMsg
+	}{
+		{"ctrl+c", tea.KeyMsg{Type: tea.KeyCtrlC}},
+		{"esc", tea.KeyMsg{Type: tea.KeyEscape}},
+	}
+	for _, k := range keys {
+		t.Run(k.name, func(t *testing.T) {
+			sig := make(chan struct{})
+			m := spinnerModel{phase: "Thinking", start: time.Now(), cancelSignal: sig}
 
-	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+			updated, cmd := m.Update(k.msg)
+			model := updated.(spinnerModel)
+
+			if model.quitting {
+				t.Error("should not quit immediately")
+			}
+			if !model.userCancelled {
+				t.Error("expected userCancelled=true")
+			}
+			if cmd != nil {
+				t.Error("expected nil cmd (spinner keeps running)")
+			}
+			select {
+			case <-sig:
+			default:
+				t.Error("expected cancelSignal to be closed")
+			}
+		})
+	}
+}
+
+func TestSpinnerModel_Update_EscIdempotent(t *testing.T) {
+	sig := make(chan struct{})
+	m := spinnerModel{phase: "Thinking", start: time.Now(), cancelSignal: sig}
+
+	// First Esc
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	model := updated.(spinnerModel)
 
-	if !model.quitting {
-		t.Error("expected quitting=true on ctrl+c")
+	// Second Esc should not panic (double close)
+	updated2, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	model2 := updated2.(spinnerModel)
+
+	if !model2.userCancelled {
+		t.Error("expected userCancelled to remain true")
 	}
-	if cmd == nil {
-		t.Error("expected tea.Quit command")
+	if cmd != nil {
+		t.Error("expected nil cmd on repeated esc")
 	}
 }
 
