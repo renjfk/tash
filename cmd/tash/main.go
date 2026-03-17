@@ -75,7 +75,7 @@ func main() {
 		session, args := extractFlag(os.Args[2:], "--session")
 		outputFile, args := extractFlag(args, "--output")
 		if len(args) == 0 {
-			fmt.Fprintln(os.Stderr, "tash: query requires input")
+			data.Error("query requires input")
 			os.Exit(1)
 		}
 		input := strings.Join(args, " ")
@@ -111,7 +111,7 @@ func main() {
 		runUsage(cfg)
 
 	default:
-		fmt.Fprintf(os.Stderr, "tash: unknown command %q\n", os.Args[1])
+		data.Error(fmt.Sprintf("unknown command %q", os.Args[1]))
 		fmt.Fprintln(os.Stderr, usageText)
 		os.Exit(1)
 	}
@@ -318,7 +318,7 @@ end
 		return fmt.Errorf("write tash.fish: %w", err)
 	}
 
-	fmt.Fprintln(os.Stderr, "tash: installed fish integration at", path)
+	data.Info("installed fish integration at " + path)
 	return nil
 }
 
@@ -342,7 +342,7 @@ func runUsage(cfg *data.Config) {
 	}
 
 	if stats.TotalCalls == 0 {
-		fmt.Fprintln(os.Stderr, "tash: no usage recorded yet")
+		data.Info("no usage recorded yet")
 		return
 	}
 
