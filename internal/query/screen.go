@@ -73,9 +73,12 @@ func zellijDumpScreen(full bool) (string, error) {
 	_ = tmpFile.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	args := []string{"action", "dump-screen", tmpPath}
+	args := []string{"action", "dump-screen", "--path", tmpPath}
 	if full {
-		args = []string{"action", "dump-screen", "--full", tmpPath}
+		args = append(args, "--full")
+	}
+	if paneID := os.Getenv("ZELLIJ_PANE_ID"); paneID != "" {
+		args = append(args, "--pane-id", paneID)
 	}
 
 	cmd := exec.Command("zellij", args...)

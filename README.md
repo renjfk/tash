@@ -57,7 +57,7 @@ tash stays in its lane: quick command suggestions and shell-level chat, right wh
 ### Requirements
 
 - [fish shell](https://fishshell.com/)
-- [Zellij](https://zellij.dev/) (optional — enables screen capture so the AI can read terminal output)
+- [Zellij](https://zellij.dev/) >= 0.44.0 (optional — enables screen capture so the AI can read terminal output)
 
 ### Homebrew
 
