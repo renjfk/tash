@@ -188,6 +188,40 @@ func TestParseResponse_CodeFences(t *testing.T) {
 	}
 }
 
+func TestParseResponse_StripsThinkBlocks(t *testing.T) {
+	raw := "<think>check tools first</think>\n{\"type\": \"command\", \"commands\": [\"echo hello\"]}"
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+	if responses[0].Type != "command" {
+		t.Errorf("expected command, got %q", responses[0].Type)
+	}
+	if len(responses[0].Commands) != 1 || responses[0].Commands[0] != "echo hello" {
+		t.Errorf("expected echo hello command, got %v", responses[0].Commands)
+	}
+	if responses[0].Message != "" {
+		t.Errorf("expected empty message after stripping think block, got %q", responses[0].Message)
+	}
+}
+
+func TestParseResponse_UsesFinalSectionAfterReasoningPreamble(t *testing.T) {
+	raw := "Reasoning:\ncheck options\nFinal answer:\n{\"type\": \"chat\", \"message\": \"Hello\"}"
+	responses, err := ParseResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(responses) != 1 {
+		t.Fatalf("expected 1 response, got %d", len(responses))
+	}
+	if responses[0].Type != "chat" || responses[0].Message != "Hello" {
+		t.Errorf("expected final chat response, got %#v", responses[0])
+	}
+}
+
 func TestParseResponse_PlanType(t *testing.T) {
 	raw := `{"type": "plan", "commands": ["kubectl get pods -A"], "message": "Finding pods first.", "steps_remaining": 2}`
 	responses, err := ParseResponse(raw)
@@ -313,6 +347,39 @@ func TestStripCodeFences(t *testing.T) {
 			got := stripCodeFences(tt.input)
 			if got != tt.want {
 				t.Errorf("stripCodeFences() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStripThinkingContent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no thinking content",
+			input: `{"type": "chat"}`,
+			want:  `{"type": "chat"}`,
+		},
+		{
+			name:  "think tags removed",
+			input: "<think>hidden</think>\n{\"type\": \"chat\"}",
+			want:  `{"type": "chat"}`,
+		},
+		{
+			name:  "reasoning preamble keeps final answer",
+			input: "Reasoning:\nstep 1\nFinal answer:\n{\"type\": \"chat\"}",
+			want:  `{"type": "chat"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripThinkingContent(tt.input)
+			if got != tt.want {
+				t.Errorf("stripThinkingContent() = %q, want %q", got, tt.want)
 			}
 		})
 	}

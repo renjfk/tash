@@ -67,6 +67,12 @@ func TestComplete_Success(t *testing.T) {
 		if body.Messages[0].Role != "system" {
 			t.Errorf("expected first message role system, got %s", body.Messages[0].Role)
 		}
+		if body.ReasoningEffort != "medium" {
+			t.Errorf("expected reasoning_effort medium, got %q", body.ReasoningEffort)
+		}
+		if body.ChatTemplateKwargs["enable_thinking"] != true {
+			t.Errorf("expected chat_template_kwargs.enable_thinking true, got %#v", body.ChatTemplateKwargs["enable_thinking"])
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(apiResp)
@@ -76,6 +82,8 @@ func TestComplete_Success(t *testing.T) {
 	cfg := data.DefaultConfig()
 	cfg.Model.Endpoint = server.URL
 	cfg.Model.APIKeyEnv = "TEST_TASH_API_KEY"
+	cfg.Model.ReasoningEffort = " medium "
+	cfg.Model.ChatTemplateKwargs = map[string]any{"enable_thinking": true}
 	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
@@ -101,19 +109,69 @@ func TestComplete_Success(t *testing.T) {
 	}
 }
 
-func TestComplete_NoAPIKey(t *testing.T) {
+func TestComplete_OmitsOptionalProviderFieldsWhenEmpty(t *testing.T) {
+	var receivedBody map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&receivedBody); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{Message: chatMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
 	cfg := data.DefaultConfig()
-	cfg.Model.APIKeyEnv = "NONEXISTENT_KEY_FOR_TEST"
-	t.Setenv("NONEXISTENT_KEY_FOR_TEST", "")
+	cfg.Model.Endpoint = server.URL
+	cfg.Model.APIKeyEnv = "TEST_TASH_API_KEY"
+	cfg.Model.ReasoningEffort = "   "
+	t.Setenv("TEST_TASH_API_KEY", "test-key")
 
 	client := NewClient(cfg)
-	_, err := client.Complete(context.Background(), Request{
+	_, _ = client.Complete(context.Background(), Request{
 		Model:    "test",
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
 
-	if err == nil {
-		t.Error("expected error when API key is empty")
+	if _, ok := receivedBody["reasoning_effort"]; ok {
+		t.Error("expected reasoning_effort to be omitted when empty")
+	}
+	if _, ok := receivedBody["chat_template_kwargs"]; ok {
+		t.Error("expected chat_template_kwargs to be omitted when empty")
+	}
+}
+
+func TestComplete_NoAPIKey(t *testing.T) {
+	var authHeader string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{Message: chatMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	cfg := data.DefaultConfig()
+	cfg.Model.Endpoint = server.URL
+	cfg.Model.APIKeyEnv = "NONEXISTENT_KEY_FOR_TEST"
+	t.Setenv("NONEXISTENT_KEY_FOR_TEST", "")
+
+	client := NewClient(cfg)
+	resp, err := client.Complete(context.Background(), Request{
+		Model:    "test",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Errorf("unexpected content: %q", resp.Content)
+	}
+	if authHeader != "" {
+		t.Errorf("expected no Authorization header, got %q", authHeader)
 	}
 }
 

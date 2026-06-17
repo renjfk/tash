@@ -71,9 +71,6 @@ func NewClient(cfg *data.Config) *Client {
 // The context can be used to cancel in-flight requests (e.g. when the user presses Esc).
 func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 	apiKey := c.cfg.APIKey()
-	if apiKey == "" {
-		return nil, fmt.Errorf("API key not set (env: %s)", c.cfg.Model.APIKeyEnv)
-	}
 
 	// Build OpenAI-compatible messages: system prompt as first message, then conversation
 	var messages []chatMessage
@@ -85,9 +82,11 @@ func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 	}
 
 	body := chatRequest{
-		Model:     req.Model,
-		MaxTokens: c.cfg.Model.MaxTokens,
-		Messages:  messages,
+		Model:              req.Model,
+		MaxTokens:          c.cfg.Model.MaxTokens,
+		Messages:           messages,
+		ChatTemplateKwargs: c.cfg.Model.ChatTemplateKwargs,
+		ReasoningEffort:    strings.TrimSpace(c.cfg.Model.ReasoningEffort),
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -110,7 +109,9 @@ func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	if apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	}
 
 	start := time.Now()
 	resp, err := c.httpClient.Do(httpReq)
@@ -165,6 +166,7 @@ func (c *Client) Complete(ctx context.Context, req Request) (*Response, error) {
 // Non-JSON lines preceding a command/chat are captured as context text.
 // Returns all parsed responses in order.
 func ParseResponse(raw string) ([]TashResponse, error) {
+	raw = stripThinkingContent(raw)
 	raw = stripCodeFences(raw)
 
 	var responses []TashResponse
@@ -243,6 +245,52 @@ func stripCodeFences(s string) string {
 	return s
 }
 
+func stripThinkingContent(s string) string {
+	stripped := strings.TrimSpace(s)
+	for _, marker := range []struct{ open, close string }{
+		{open: "<think>", close: "</think>"},
+		{open: "<thinking>", close: "</thinking>"},
+	} {
+		for {
+			lower := strings.ToLower(stripped)
+			start := strings.Index(lower, marker.open)
+			if start < 0 {
+				break
+			}
+			end := strings.Index(lower[start+len(marker.open):], marker.close)
+			if end < 0 {
+				stripped = strings.TrimSpace(stripped[:start])
+				break
+			}
+			end += start + len(marker.open) + len(marker.close)
+			stripped = strings.TrimSpace(stripped[:start] + "\n" + stripped[end:])
+		}
+	}
+
+	lower := strings.ToLower(strings.TrimSpace(stripped))
+	for _, prefix := range []string{
+		"thinking process:",
+		"thought process:",
+		"reasoning:",
+		"chain of thought:",
+		"here's a thinking process",
+		"here is a thinking process",
+	} {
+		if !strings.HasPrefix(lower, prefix) {
+			continue
+		}
+		for _, marker := range []string{"final answer:", "final:", "summary:", "overview:", "answer:"} {
+			idx := strings.Index(lower, marker)
+			if idx >= 0 {
+				return strings.TrimSpace(stripped[idx+len(marker):])
+			}
+		}
+		return ""
+	}
+
+	return stripped
+}
+
 func trimPrefixAny(s string, prefixes ...string) string {
 	for _, p := range prefixes {
 		if len(s) > len(p) && s[:len(p)] == p {
@@ -264,9 +312,11 @@ func lastIndex(s, substr string) int {
 // OpenAI-compatible API types
 
 type chatRequest struct {
-	Model     string        `json:"model"`
-	MaxTokens int           `json:"max_tokens"`
-	Messages  []chatMessage `json:"messages"`
+	Model              string         `json:"model"`
+	MaxTokens          int            `json:"max_tokens"`
+	Messages           []chatMessage  `json:"messages"`
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
+	ReasoningEffort    string         `json:"reasoning_effort,omitempty"`
 }
 
 type chatMessage struct {

@@ -35,6 +35,8 @@ the result directly into your command line buffer for you to review, edit, or ru
 - Handles multi-step tasks with interactive approval for each step
 - Press Esc to cancel any in-flight AI request and return to the shell immediately
 - Works with any OpenAI-compatible API endpoint
+- Supports provider-specific request options such as `reasoning_effort` and `chat_template_kwargs`
+- Strips common reasoning blocks like `<think>...</think>` before parsing AI output
 - Single binary, zero shell startup cost, minimal dependencies
 
 ## What It Is Not
@@ -84,7 +86,7 @@ The binary outputs to `bin/tash`.
 ## Setup
 
 > [!IMPORTANT]
-> Set your API key before running `tash init`:
+> Set your API key before running `tash init` if your endpoint requires authentication:
 > ```bash
 > set -Ux ANTHROPIC_API_KEY your-key
 > ```
@@ -120,7 +122,9 @@ inline comments describing each field and its valid values. Invalid values cause
 |-------------------------------------|------------------------------------------------------------------------------|
 | `model.name`                        | Any model supported by the configured endpoint                               |
 | `model.endpoint`                    | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)                  |
-| `model.api_key_env`                 | Environment variable holding the API key                                     |
+| `model.api_key_env`                 | Environment variable holding the API key; can be left unset for open endpoints |
+| `model.reasoning_effort`            | Optional `reasoning_effort` sent to compatible providers                     |
+| `model.chat_template_kwargs`        | Optional JSON object sent as `chat_template_kwargs` to compatible providers  |
 | `behavior.auto_intercept`           | Automatically intercept failed natural language commands                     |
 | `behavior.max_retries`              | Retry attempts on API or parse failures (default 3)                          |
 | `behavior.max_tool_calls`           | Tool calls (history, conversation, screen) per query (default 3)             |
@@ -138,6 +142,20 @@ inline comments describing each field and its valid values. Invalid values cause
 
 Available themes: `solarized` `gruvbox` `nord` `dracula` `monokai` `catppuccin`
 `tokyo-night` `rose-pine` `kanagawa` `everforest` `onedark` `nightfox`
+
+Example model config for compatible providers:
+
+```yaml
+model:
+  name: qwen3
+  endpoint: http://localhost:8000/v1
+  api_key_env: OPENAI_API_KEY
+  reasoning_effort: low
+  chat_template_kwargs:
+    enable_thinking: true
+```
+
+If your provider returns visible reasoning text or tags such as `<think>...</think>`, tash removes those before parsing the response so command suggestions and chat output stay clean.
 
 ### Data Directory
 

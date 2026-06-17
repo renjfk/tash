@@ -35,10 +35,12 @@ type TerminalConfig struct {
 
 // ModelConfig holds AI model settings.
 type ModelConfig struct {
-	Name      string `yaml:"name"`
-	Endpoint  string `yaml:"endpoint"`
-	APIKeyEnv string `yaml:"api_key_env"`
-	MaxTokens int    `yaml:"max_tokens"`
+	Name               string         `yaml:"name"`
+	Endpoint           string         `yaml:"endpoint"`
+	APIKeyEnv          string         `yaml:"api_key_env"`
+	MaxTokens          int            `yaml:"max_tokens"`
+	ReasoningEffort    string         `yaml:"reasoning_effort"`
+	ChatTemplateKwargs map[string]any `yaml:"chat_template_kwargs"`
 }
 
 // BehaviorConfig holds runtime behavior settings.
@@ -285,10 +287,12 @@ func buildConfigComments() map[string]fieldComment {
 		"model": {
 			comment: "AI model and endpoint configuration",
 			children: map[string]fieldComment{
-				"name":        {comment: "model identifier sent to the API"},
-				"endpoint":    {comment: "base URL for the OpenAI-compatible API"},
-				"api_key_env": {comment: "environment variable containing the API key"},
-				"max_tokens":  {comment: "maximum tokens in the AI response"},
+				"name":                 {comment: "model identifier sent to the API"},
+				"endpoint":             {comment: "base URL for the OpenAI-compatible API"},
+				"api_key_env":          {comment: "environment variable containing the API key"},
+				"max_tokens":           {comment: "maximum tokens in the AI response"},
+				"reasoning_effort":     {comment: "optional reasoning_effort for compatible providers, e.g. low, medium, high"},
+				"chat_template_kwargs": {comment: "optional provider-specific chat template kwargs sent as a JSON object"},
 			},
 		},
 		"behavior": {

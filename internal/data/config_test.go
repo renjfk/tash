@@ -24,6 +24,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Model.MaxTokens != 2048 {
 		t.Errorf("expected 2048, got %d", cfg.Model.MaxTokens)
 	}
+	if cfg.Model.ReasoningEffort != "" {
+		t.Errorf("expected empty reasoning effort by default, got %q", cfg.Model.ReasoningEffort)
+	}
+	if cfg.Model.ChatTemplateKwargs != nil {
+		t.Errorf("expected nil chat template kwargs by default, got %#v", cfg.Model.ChatTemplateKwargs)
+	}
 	if cfg.Behavior.MaxRetries != 3 {
 		t.Errorf("expected 3 retries, got %d", cfg.Behavior.MaxRetries)
 	}
@@ -192,6 +198,9 @@ func TestLoadConfig_WithEnv(t *testing.T) {
   endpoint: https://test.example.com/v1
   api_key_env: TEST_KEY
   max_tokens: 1024
+  reasoning_effort: medium
+  chat_template_kwargs:
+    enable_thinking: true
 `
 	_ = os.WriteFile(filepath.Join(tashDir, "config.yaml"), []byte(configContent), 0644)
 
@@ -205,6 +214,12 @@ func TestLoadConfig_WithEnv(t *testing.T) {
 	}
 	if cfg.Model.MaxTokens != 1024 {
 		t.Errorf("expected 1024, got %d", cfg.Model.MaxTokens)
+	}
+	if cfg.Model.ReasoningEffort != "medium" {
+		t.Errorf("expected reasoning effort medium, got %q", cfg.Model.ReasoningEffort)
+	}
+	if cfg.Model.ChatTemplateKwargs["enable_thinking"] != true {
+		t.Errorf("expected enable_thinking true, got %#v", cfg.Model.ChatTemplateKwargs["enable_thinking"])
 	}
 	if cfg.DataDir() != tashDir {
 		t.Errorf("expected %q, got %q", tashDir, cfg.DataDir())
@@ -258,6 +273,8 @@ func TestRenderConfig_Comments(t *testing.T) {
 	// Verify field-level comments are dynamically generated from slices
 	for _, want := range []string{
 		"# model identifier sent to the API",
+		"# optional reasoning_effort for compatible providers, e.g. low, medium, high",
+		"# optional provider-specific chat template kwargs sent as a JSON object",
 		"# retry attempts on API or parse failures",
 		"# check for new releases and show update notices",
 		"# seconds between automatic profile rebuilds",
@@ -296,6 +313,8 @@ func TestRenderConfig_NoThemes(t *testing.T) {
 
 func TestRenderConfig_Roundtrip(t *testing.T) {
 	cfg := DefaultConfig()
+	cfg.Model.ReasoningEffort = "low"
+	cfg.Model.ChatTemplateKwargs = map[string]any{"enable_thinking": true}
 	data, err := renderConfig(cfg)
 	if err != nil {
 		t.Fatalf("renderConfig: %v", err)
@@ -309,6 +328,12 @@ func TestRenderConfig_Roundtrip(t *testing.T) {
 
 	if parsed.Model.Name != cfg.Model.Name {
 		t.Errorf("roundtrip model.name: want %q, got %q", cfg.Model.Name, parsed.Model.Name)
+	}
+	if parsed.Model.ReasoningEffort != cfg.Model.ReasoningEffort {
+		t.Errorf("roundtrip model.reasoning_effort: want %q, got %q", cfg.Model.ReasoningEffort, parsed.Model.ReasoningEffort)
+	}
+	if parsed.Model.ChatTemplateKwargs["enable_thinking"] != true {
+		t.Errorf("roundtrip model.chat_template_kwargs.enable_thinking: want true, got %#v", parsed.Model.ChatTemplateKwargs["enable_thinking"])
 	}
 	if parsed.Behavior.MaxRetries != cfg.Behavior.MaxRetries {
 		t.Errorf("roundtrip max_retries: want %d, got %d", cfg.Behavior.MaxRetries, parsed.Behavior.MaxRetries)
