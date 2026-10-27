@@ -39,6 +39,7 @@ type ModelConfig struct {
 	Endpoint           string         `yaml:"endpoint"`
 	APIKeyEnv          string         `yaml:"api_key_env"`
 	MaxTokens          int            `yaml:"max_tokens"`
+	MaxTokensParam     string         `yaml:"max_tokens_param"`
 	ReasoningEffort    string         `yaml:"reasoning_effort"`
 	ChatTemplateKwargs map[string]any `yaml:"chat_template_kwargs"`
 }
@@ -66,10 +67,11 @@ type ProfileConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Model: ModelConfig{
-			Name:      "claude-sonnet-4-6",
-			Endpoint:  "https://api.anthropic.com/v1",
-			APIKeyEnv: "ANTHROPIC_API_KEY",
-			MaxTokens: 2048,
+			Name:           "claude-sonnet-4-6",
+			Endpoint:       "https://api.anthropic.com/v1",
+			APIKeyEnv:      "ANTHROPIC_API_KEY",
+			MaxTokens:      2048,
+			MaxTokensParam: "max_tokens",
 		},
 		Behavior: BehaviorConfig{
 			MaxRetries:             3,
@@ -140,6 +142,9 @@ func (c *Config) validate() error {
 	if c.Model.MaxTokens <= 0 {
 		errs = append(errs, fmt.Sprintf("model.max_tokens: must be positive, got %d", c.Model.MaxTokens))
 	}
+	if !isValid(c.Model.MaxTokensParam, maxTokensParams) {
+		errs = append(errs, fmt.Sprintf("model.max_tokens_param: %q is not valid (options: %s)", c.Model.MaxTokensParam, strings.Join(maxTokensParams, ", ")))
+	}
 	if c.Behavior.MaxRetries <= 0 {
 		errs = append(errs, fmt.Sprintf("behavior.max_retries: must be positive, got %d", c.Behavior.MaxRetries))
 	}
@@ -170,6 +175,7 @@ func (c *Config) validate() error {
 
 var logLevels = []string{"debug", "info", "warn", "error"}
 var terminalColors = []string{"auto", "256", "16", "none"}
+var maxTokensParams = []string{"max_tokens", "max_completion_tokens"}
 
 // themeNames is set by RegisterThemeNames at startup. Falls back to empty.
 var themeNames []string
@@ -291,6 +297,7 @@ func buildConfigComments() map[string]fieldComment {
 				"endpoint":             {comment: "base URL for the OpenAI-compatible API"},
 				"api_key_env":          {comment: "environment variable containing the API key"},
 				"max_tokens":           {comment: "maximum tokens in the AI response"},
+				"max_tokens_param":     {comment: "request field carrying the limit: max_tokens (default) or max_completion_tokens (newer OpenAI models)"},
 				"reasoning_effort":     {comment: "optional reasoning_effort for compatible providers, e.g. low, medium, high"},
 				"chat_template_kwargs": {comment: "optional provider-specific chat template kwargs sent as a JSON object"},
 			},
@@ -299,7 +306,7 @@ func buildConfigComments() map[string]fieldComment {
 			comment: "runtime behavior settings",
 			children: map[string]fieldComment{
 				"max_retries":              {comment: "retry attempts on API or parse failures"},
-				"max_tool_calls":           {comment: "maximum tool calls (history, conversation, screen) per query"},
+				"max_tool_calls":           {comment: "maximum non-terminal tool calls per query"},
 				"max_memories":             {comment: "maximum durable memories kept in conversation history"},
 				"max_conversation_entries": {comment: "maximum conversation entries the AI can load (initial window is 20)"},
 				"max_history_results":      {comment: "maximum results returned from shell history searches"},

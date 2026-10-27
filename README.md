@@ -124,10 +124,11 @@ inline comments describing each field and its valid values. Invalid values cause
 | `model.endpoint`                    | Any OpenAI-compatible API (Anthropic, OpenAI, Ollama, etc.)                    |
 | `model.api_key_env`                 | Environment variable holding the API key; can be left unset for open endpoints |
 | `model.reasoning_effort`            | Optional `reasoning_effort` sent to compatible providers                       |
+| `model.max_tokens_param`            | Response-limit field: `max_tokens` (default) or `max_completion_tokens`        |
 | `model.chat_template_kwargs`        | Optional JSON object sent as `chat_template_kwargs` to compatible providers    |
 | `behavior.auto_intercept`           | Automatically intercept failed natural language commands                       |
 | `behavior.max_retries`              | Retry attempts on API or parse failures (default 3)                            |
-| `behavior.max_tool_calls`           | Tool calls (history, conversation, screen) per query (default 3)               |
+| `behavior.max_tool_calls`           | Non-terminal tool calls (history, conversation, screen) per query (default 3)  |
 | `behavior.max_memories`             | Durable facts the AI remembers about you across sessions                       |
 | `behavior.max_conversation_entries` | Max conversation entries the AI can load; initial window is 20 (default 250)   |
 | `behavior.max_history_results`      | Max results from shell history searches (default 200)                          |

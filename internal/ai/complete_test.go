@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	aitools "github.com/renjfk/tash/internal/ai/tools"
 	"github.com/renjfk/tash/internal/data"
 )
 
@@ -270,6 +271,84 @@ func TestComplete_UsesConfigMaxTokens(t *testing.T) {
 	}
 }
 
+func TestComplete_SendsToolsAndParsesToolCalls(t *testing.T) {
+	var receivedBody chatRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{
+				Message: chatMessage{
+					ToolCalls: []chatToolCall{{
+						ID:   "call_1",
+						Type: "function",
+						Function: chatFunctionCall{
+							Name:      "command",
+							Arguments: `{"commands":["git status"],"message":"Checks repo state."}`,
+						},
+					}},
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+
+	cfg := data.DefaultConfig()
+	cfg.Model.Endpoint = server.URL
+
+	client := NewClient(cfg)
+	resp, err := client.Complete(context.Background(), Request{
+		Model:    "test",
+		Messages: []Message{{Role: "user", Content: "status"}},
+		Tools:    aitools.All(),
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if receivedBody.ToolChoice != "auto" {
+		t.Errorf("expected default tool_choice auto, got %q", receivedBody.ToolChoice)
+	}
+	if len(receivedBody.Tools) != len(aitools.All()) {
+		t.Fatalf("expected %d tools, got %d", len(aitools.All()), len(receivedBody.Tools))
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
+	}
+	if resp.ToolCalls[0].Function.Name != "command" {
+		t.Errorf("expected command tool call, got %q", resp.ToolCalls[0].Function.Name)
+	}
+}
+
+func TestComplete_NoToolsOmitsTools(t *testing.T) {
+	var receivedBody chatRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+		_ = json.NewEncoder(w).Encode(chatResponse{
+			Choices: []chatChoice{{Message: chatMessage{Content: "ok"}}},
+		})
+	}))
+	defer server.Close()
+
+	cfg := data.DefaultConfig()
+	cfg.Model.Endpoint = server.URL
+
+	client := NewClient(cfg)
+	_, err := client.Complete(context.Background(), Request{
+		Model:    "test",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if len(receivedBody.Tools) != 0 {
+		t.Errorf("expected no tools, got %d", len(receivedBody.Tools))
+	}
+	if receivedBody.ToolChoice != "" {
+		t.Errorf("expected empty tool_choice, got %q", receivedBody.ToolChoice)
+	}
+}
+
 func TestComplete_NoSystemPrompt(t *testing.T) {
 	var receivedBody chatRequest
 
@@ -362,5 +441,84 @@ func TestComplete_ContextCancellation(t *testing.T) {
 	err := <-done
 	if err == nil {
 		t.Error("expected error on context cancellation")
+	}
+}
+
+func TestComplete_ParsesCachedTokens(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"openai", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1217,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":1204}}}`},
+		{"anthropic", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1217,"completion_tokens":5,"cache_read_input_tokens":1000}}`},
+		{"deepseek", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1217,"completion_tokens":5,"prompt_cache_hit_tokens":900}}`},
+		{"none", `{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1217,"completion_tokens":5}}`},
+	}
+	want := map[string]int{"openai": 1204, "anthropic": 1000, "deepseek": 900, "none": 0}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+
+			cfg := data.DefaultConfig()
+			cfg.Model.Endpoint = server.URL
+			client := NewClient(cfg)
+
+			resp, err := client.Complete(context.Background(), Request{
+				Model:    "test",
+				Messages: []Message{{Role: "user", Content: "hi"}},
+			})
+			if err != nil {
+				t.Fatalf("Complete: %v", err)
+			}
+			if resp.Usage.CachedTokens != want[tt.name] {
+				t.Errorf("expected %d cached tokens, got %d", want[tt.name], resp.Usage.CachedTokens)
+			}
+		})
+	}
+}
+
+func TestComplete_MaxTokensParam(t *testing.T) {
+	tests := []struct {
+		param       string
+		wantTokens  int
+		wantComplmt int
+	}{
+		{"max_tokens", 256, 0},
+		{"max_completion_tokens", 0, 256},
+	}
+	for _, tt := range tests {
+		t.Run(tt.param, func(t *testing.T) {
+			var receivedBody chatRequest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&receivedBody)
+				_ = json.NewEncoder(w).Encode(chatResponse{
+					Choices: []chatChoice{{Message: chatMessage{Content: "ok"}}},
+				})
+			}))
+			defer server.Close()
+
+			cfg := data.DefaultConfig()
+			cfg.Model.Endpoint = server.URL
+			cfg.Model.MaxTokens = 256
+			cfg.Model.MaxTokensParam = tt.param
+
+			client := NewClient(cfg)
+			if _, err := client.Complete(context.Background(), Request{
+				Model:    "test",
+				Messages: []Message{{Role: "user", Content: "hi"}},
+			}); err != nil {
+				t.Fatalf("Complete: %v", err)
+			}
+			if receivedBody.MaxTokens != tt.wantTokens {
+				t.Errorf("max_tokens = %d, want %d", receivedBody.MaxTokens, tt.wantTokens)
+			}
+			if receivedBody.MaxCompletionTokens != tt.wantComplmt {
+				t.Errorf("max_completion_tokens = %d, want %d", receivedBody.MaxCompletionTokens, tt.wantComplmt)
+			}
+		})
 	}
 }

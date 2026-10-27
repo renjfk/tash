@@ -20,7 +20,7 @@ func TestUsageCRUD(t *testing.T) {
 	}
 
 	// Record usage
-	if err := RecordUsage(dir, "query", "claude-sonnet-4-6", 100, 50); err != nil {
+	if err := RecordUsage(dir, "query", "claude-sonnet-4-6", 100, 40, 50); err != nil {
 		t.Fatalf("RecordUsage: %v", err)
 	}
 
@@ -35,6 +35,9 @@ func TestUsageCRUD(t *testing.T) {
 	if stats.TotalPrompt != 100 {
 		t.Errorf("expected 100 prompt tokens, got %d", stats.TotalPrompt)
 	}
+	if stats.TotalCached != 40 {
+		t.Errorf("expected 40 cached tokens, got %d", stats.TotalCached)
+	}
 	if stats.TotalComp != 50 {
 		t.Errorf("expected 50 completion tokens, got %d", stats.TotalComp)
 	}
@@ -44,9 +47,12 @@ func TestUsageCRUD(t *testing.T) {
 	if stats.Query.Prompt != 100 {
 		t.Errorf("expected 100 query prompt tokens, got %d", stats.Query.Prompt)
 	}
+	if stats.Query.Cached != 40 {
+		t.Errorf("expected 40 query cached tokens, got %d", stats.Query.Cached)
+	}
 
 	// Record another
-	_ = RecordUsage(dir, "rebuild", "claude-sonnet-4-6", 200, 100)
+	_ = RecordUsage(dir, "rebuild", "claude-sonnet-4-6", 200, 0, 100)
 	stats, _ = LoadUsage(dir)
 	if stats.TotalCalls != 2 {
 		t.Errorf("expected 2 calls, got %d", stats.TotalCalls)

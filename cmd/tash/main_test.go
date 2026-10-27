@@ -115,9 +115,9 @@ func TestRunUsage_WithData(t *testing.T) {
 	cfg.SetDataDir(dir)
 
 	// Record some usage
-	_ = data.RecordUsage(dir, "query", "test-model", 100, 50)
-	_ = data.RecordUsage(dir, "query", "test-model", 200, 75)
-	_ = data.RecordUsage(dir, "rebuild", "test-model", 500, 100)
+	_ = data.RecordUsage(dir, "query", "test-model", 100, 0, 50)
+	_ = data.RecordUsage(dir, "query", "test-model", 200, 0, 75)
+	_ = data.RecordUsage(dir, "rebuild", "test-model", 500, 0, 100)
 
 	oldArgs := os.Args
 	os.Args = []string{"tash", "usage"}
@@ -154,7 +154,7 @@ func TestRunUsage_Reset(t *testing.T) {
 	cfg.SetDataDir(dir)
 
 	// Record usage first
-	_ = data.RecordUsage(dir, "query", "test-model", 100, 50)
+	_ = data.RecordUsage(dir, "query", "test-model", 100, 0, 50)
 
 	old := os.Stderr
 	os.Stderr, _ = os.Open(os.DevNull)

@@ -12,10 +12,11 @@ accepted commands into the fish command line buffer via `commandline -r`.
 
 ## Architecture
 
-Four packages under `internal/` — nothing exported for external consumption.
+Five packages under `internal/` — nothing exported for external consumption.
 
 - `cmd/tash/` — thin CLI entry (`main.go`), post-exec hook (`tick.go`), profile rebuild (`rebuild.go`)
 - `internal/ai/` — OpenAI-compatible API client, system prompt
+- `internal/ai/tools/` — native tool-call definitions and schemas exposed to the model
 - `internal/data/` — all persistent state: config, conversation, history, profile, usage, logging
 - `internal/query/` — query orchestration: AI call, response parsing, tool validation, screen capture
 - `internal/tui/` — spinner + suggestion prompt (bubbletea)
@@ -36,11 +37,15 @@ make build          # lint + fmt + build bin/tash
 make install        # build + copy to ~/.local/bin/
 make check          # lint + fmt only (no build)
 make test           # go test ./...
+make e2e            # end-to-end suite; needs E2E_ENDPOINT/E2E_MODEL/key (see e2e/README.md)
 make lint           # golangci-lint run ./...
 make fmt            # golangci-lint fmt ./... --diff
 ```
 
 Verify changes: `make build` + `make test` with zero failures.
+
+Machine-specific settings that must not be committed (the e2e endpoint, model,
+and key) live in `AGENTS.local.md` when present. Read it before running `make e2e`.
 
 The binary outputs to `bin/tash`. Fish hooks point at `~/tash/bin/tash` for
 development — no install step needed.

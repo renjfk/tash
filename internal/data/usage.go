@@ -14,6 +14,7 @@ const usageFile = "usage.json"
 type ActionStats struct {
 	Calls  int `json:"calls"`
 	Prompt int `json:"prompt"`
+	Cached int `json:"cached"`
 	Comp   int `json:"completion"`
 }
 
@@ -22,14 +23,16 @@ type UsageStats struct {
 	Query       ActionStats `json:"query"`
 	Rebuild     ActionStats `json:"rebuild"`
 	TotalPrompt int         `json:"total_prompt"`
+	TotalCached int         `json:"total_cached"`
 	TotalComp   int         `json:"total_completion"`
 	TotalCalls  int         `json:"total_calls"`
 	FirstCall   int64       `json:"first_call"`
 	LastCall    int64       `json:"last_call"`
 }
 
-// RecordUsage increments counters for the given action.
-func RecordUsage(dataDir string, action string, _ string, promptTokens int, completionTokens int) error {
+// RecordUsage increments counters for the given action. cachedTokens counts the
+// prompt tokens served from the provider's prompt cache, when reported.
+func RecordUsage(dataDir string, action string, _ string, promptTokens, cachedTokens, completionTokens int) error {
 	stats, _ := LoadUsage(dataDir)
 
 	now := time.Now().Unix()
@@ -38,14 +41,17 @@ func RecordUsage(dataDir string, action string, _ string, promptTokens int, comp
 	case "query":
 		stats.Query.Calls++
 		stats.Query.Prompt += promptTokens
+		stats.Query.Cached += cachedTokens
 		stats.Query.Comp += completionTokens
 	case "rebuild":
 		stats.Rebuild.Calls++
 		stats.Rebuild.Prompt += promptTokens
+		stats.Rebuild.Cached += cachedTokens
 		stats.Rebuild.Comp += completionTokens
 	}
 
 	stats.TotalPrompt += promptTokens
+	stats.TotalCached += cachedTokens
 	stats.TotalComp += completionTokens
 	stats.TotalCalls++
 	if stats.FirstCall == 0 {

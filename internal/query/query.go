@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/renjfk/tash/internal/ai"
+	aitools "github.com/renjfk/tash/internal/ai/tools"
 	"github.com/renjfk/tash/internal/data"
 	"github.com/renjfk/tash/internal/tui"
 )
@@ -38,6 +39,8 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 
 	// Collect context
 	shellHistory := convo.RecentShellCommands()
+	toolDefs := aitools.All()
+	toolsEnabled := true
 	systemPrompt := buildSystemPrompt(cfg, prof, convo)
 
 	slog.Debug(
@@ -56,7 +59,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	}
 
 	// Build multi-turn messages from conversation history
-	messages := buildMessages(convo, shellHistory, input, initialConstraints)
+	messages := buildMessages(convo, shellHistory, input, initialConstraints, time.Now())
 
 	// Attempt loop: tool calls (history, conversation, screen) don't count toward retries.
 	// Only real failures (API error, parse error, no terminal response) do.
@@ -71,7 +74,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 	retryReason := ""
 	for attempt := 0; failures < cfg.Behavior.MaxRetries; attempt++ {
 		if len(constraints) > 0 {
-			messages = buildMessages(convo, shellHistory, input, constraints)
+			messages = buildMessages(convo, shellHistory, input, constraints, time.Now())
 		}
 
 		slog.Info(
@@ -85,13 +88,14 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			slog.Debug("message", "index", i, "role", m.Role, "content", m.Content)
 		}
 
-		resp, err := client.Complete(
+		var resp *ai.Response
+		var err error
+		resp, toolsEnabled, err = completeQuery(
 			ctx,
-			ai.Request{
-				Model:    cfg.Model.Name,
-				System:   systemPrompt,
-				Messages: messages,
-			},
+			client,
+			ai.Request{Model: cfg.Model.Name, System: systemPrompt, Messages: messages},
+			toolDefs,
+			toolsEnabled,
 		)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -111,6 +115,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 			"query",
 			cfg.Model.Name,
 			resp.Usage.PromptTokens,
+			resp.Usage.CachedTokens,
 			resp.Usage.CompletionTokens,
 		); err != nil {
 			slog.Warn("record usage", "error", err)
@@ -118,7 +123,7 @@ func Run(cfg *data.Config, prof *data.Profile, convo *data.Conversation, input s
 
 		slog.Debug("raw response", "attempt", attempt, "content", resp.Content)
 
-		responses, err := ai.ParseResponse(resp.Content)
+		responses, err := parseModelResponses(resp)
 		if err != nil {
 			slog.Error("parse error", "attempt", attempt, "error", err)
 			lastErr = err
@@ -201,6 +206,82 @@ const (
 	actionNothing        // no terminal response found
 	actionPlan           // plan step: run command, capture output, feed back to AI
 )
+
+// parseModelResponses prefers native tool calls, falling back to the legacy
+// JSONL format when the model answers with text instead of tool calls.
+func parseModelResponses(resp *ai.Response) ([]ai.TashResponse, error) {
+	if len(resp.ToolCalls) > 0 {
+		responses, err := ai.ParseToolCalls(resp.ToolCalls)
+		if err == nil {
+			// A memory call has no terminal response of its own. Some models put
+			// the user-facing reply in text content alongside it, so keep that.
+			// For other side-effect calls (history, conversation, screen) the
+			// content is only a preamble; let the query retry for the real answer.
+			if onlyMemoryCalls(responses) && strings.TrimSpace(resp.Content) != "" {
+				content, _ := ai.ParseResponse(resp.Content)
+				responses = append(responses, dropEmptyChats(content)...)
+			}
+			return responses, nil
+		}
+		slog.Warn("tool call parse failed, falling back to content", "error", err)
+		if strings.TrimSpace(resp.Content) == "" {
+			return nil, fmt.Errorf("could not parse tool calls: %w", err)
+		}
+	}
+	return ai.ParseResponse(resp.Content)
+}
+
+// onlyMemoryCalls reports whether every response is a memory call.
+func onlyMemoryCalls(responses []ai.TashResponse) bool {
+	if len(responses) == 0 {
+		return false
+	}
+	for _, r := range responses {
+		if r.Type != "memory" {
+			return false
+		}
+	}
+	return true
+}
+
+// dropEmptyChats removes chat responses with no text, such as reasoning-only
+// content that ParseResponse strips down to an empty chat.
+func dropEmptyChats(responses []ai.TashResponse) []ai.TashResponse {
+	kept := make([]ai.TashResponse, 0, len(responses))
+	for _, r := range responses {
+		if r.Type == "chat" && strings.TrimSpace(r.Message) == "" {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	return kept
+}
+
+// completeQuery sends a completion with native tool calls when enabled. If the
+// endpoint rejects the tool-enabled request (e.g. tools are not supported), it
+// retries once without tools in legacy JSON mode and reports tools as disabled
+// for the rest of the query. Transient and server errors are left to the
+// caller's retry loop so they do not silently drop tools.
+func completeQuery(
+	ctx context.Context,
+	client *ai.Client,
+	base ai.Request,
+	toolDefs []aitools.Definition,
+	toolsEnabled bool,
+) (*ai.Response, bool, error) {
+	req := base
+	if toolsEnabled {
+		req.Tools = toolDefs
+	}
+	resp, err := client.Complete(ctx, req)
+	if err != nil && toolsEnabled && ctx.Err() == nil && ai.IsToolRejection(err) {
+		slog.Warn("tool call request rejected, falling back to legacy JSON mode", "error", err)
+		req.Tools = nil
+		resp, err = client.Complete(ctx, req)
+		return resp, false, err
+	}
+	return resp, toolsEnabled, err
+}
 
 func hasTerminalResponse(responses []ai.TashResponse) bool {
 	for _, r := range responses {
@@ -412,6 +493,7 @@ func buildMessages(
 	shellHistory []data.ShellCommand,
 	currentInput string,
 	constraints []string,
+	now time.Time,
 ) []ai.Message {
 	var messages []ai.Message
 
@@ -421,7 +503,7 @@ func buildMessages(
 	}
 
 	// Build the current user message with shell context
-	userPrompt := ai.BuildQueryPrompt(currentInput, shellHistory, constraints)
+	userPrompt := ai.BuildQueryPrompt(currentInput, shellHistory, constraints, now)
 
 	// If last message is already from user (the AddQuery call), replace it
 	if len(messages) > 0 && messages[len(messages)-1].Role == "user" {
@@ -440,8 +522,6 @@ func buildSystemPrompt(cfg *data.Config, prof *data.Profile, convo *data.Convers
 
 	b.WriteString("\n\n--- Session ---\n")
 	fmt.Fprintf(&b, "tash version: %s\n", Version)
-	now := time.Now()
-	fmt.Fprintf(&b, "Current time: %s (%s)\n", data.FormatTimestamp(now.Unix()), now.Format("MST"))
 	if cfg.Terminal.ASCII {
 		b.WriteString("Terminal: ASCII-only (TTY/framebuffer console). Do NOT use emojis or Unicode symbols — they will render as garbage. ASCII art is fine.\n")
 	}

@@ -3,6 +3,7 @@ package ai
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/renjfk/tash/internal/data"
 )
@@ -21,7 +22,11 @@ Behavior:
 - NEVER use placeholders like <namespace> or <pod-name>. NEVER fabricate values — this includes "common" defaults like standard Helm labels, typical context names, or conventional namespace names. If a value wasn't explicitly in the conversation, shell history, or user profile, you don't know it. Return a simple discovery command using grep or basic listing with no label selectors or assumptions.
 - When suggesting commands, use only tools the user actually has installed.
 
-Response format — one JSON object per line (JSONL). No text outside JSON lines. You can return multiple lines when needed (e.g. memory + chat).
+Response format:
+- When tool definitions are provided in this request, answer with tool calls only. Do not emit the JSON format below.
+- When no tool definitions are provided, respond with one JSON object per line (JSONL) and no text outside JSON lines. You can return multiple lines when needed (e.g. memory + chat).
+
+The actions described below apply in both modes; the JSON lines show the wire format used when tool calls are unavailable:
 
 Command with explanation:
 {"type": "command", "commands": ["curl -s https://api.example.com | jq '.[]'"], "message": "Fetches the API and extracts all top-level entries."}
@@ -58,9 +63,16 @@ Store durable facts about the user (name, role, preferences, tech stack, workflo
 
 Memories are append-only — you cannot edit, replace, consolidate, or remove existing entries. Before storing, check the Memories section and skip anything that duplicates or overlaps with what's already there. Don't store transient things like "user wants to find a file". The slot count shown there (e.g. "12/50 slots used") is informational; be selective as you approach the cap. When the cap is hit, the oldest memory is evicted and shown to you as a constraint — re-store it (or a merged version) if it's still important. Tools available to the user are derived from their PATH and profile. Only suggest commands using tools they have.`
 
-// BuildQueryPrompt constructs the user prompt for a query, including recent shell activity.
-func BuildQueryPrompt(input string, shellHistory []data.ShellCommand, constraints []string) string {
+// BuildQueryPrompt constructs the user prompt for a query, including recent
+// shell activity. The current time lives here rather than in the system prompt
+// so the system prompt and the earlier turns form a stable, cacheable prefix;
+// only the last user turn changes between requests. Note that across separate
+// invocations the loaded conversation is a sliding tail window, so only the
+// system prompt and the retained turns are actually shared.
+func BuildQueryPrompt(input string, shellHistory []data.ShellCommand, constraints []string, now time.Time) string {
 	var b strings.Builder
+
+	fmt.Fprintf(&b, "Current time: %s (%s)\n\n", data.FormatTimestamp(now.Unix()), now.Format("MST"))
 
 	if len(shellHistory) > 0 {
 		b.WriteString("Recent shell activity:\n")

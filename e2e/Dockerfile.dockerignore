@@ -1,0 +1,9 @@
+.git
+bin
+demo.cast
+demo.gif
+e2e/traces
+*.log
+.DS_Store
+.idea
+.ruff_cache

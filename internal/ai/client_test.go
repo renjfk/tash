@@ -1,8 +1,37 @@
 package ai
 
 import (
+	"fmt"
 	"testing"
 )
+
+func TestIsToolRejection(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"400", &APIError{StatusCode: 400}, true},
+		{"404", &APIError{StatusCode: 404}, true},
+		{"415", &APIError{StatusCode: 415}, true},
+		{"422", &APIError{StatusCode: 422}, true},
+		{"401", &APIError{StatusCode: 401}, false},
+		{"403", &APIError{StatusCode: 403}, false},
+		{"429", &APIError{StatusCode: 429}, false},
+		{"500", &APIError{StatusCode: 500}, false},
+		{"503", &APIError{StatusCode: 503}, false},
+		{"wrapped 400", fmt.Errorf("request failed: %w", &APIError{StatusCode: 400}), true},
+		{"plain error", fmt.Errorf("network down"), false},
+		{"nil", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsToolRejection(tt.err); got != tt.want {
+				t.Errorf("IsToolRejection() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestParseResponse_SingleCommand(t *testing.T) {
 	raw := `{"type": "command", "commands": ["git status"]}`
@@ -236,6 +265,54 @@ func TestParseResponse_PlanType(t *testing.T) {
 	}
 	if responses[0].StepsRemaining != 2 {
 		t.Errorf("expected steps_remaining 2, got %d", responses[0].StepsRemaining)
+	}
+}
+
+func TestParseToolCalls(t *testing.T) {
+	responses, err := ParseToolCalls([]ToolCall{
+		{
+			ID:       "call_1",
+			Type:     "function",
+			Function: FunctionCall{Name: "history", Arguments: `{"filter":"git","count":30}`},
+		},
+		{
+			ID:       "call_2",
+			Type:     "function",
+			Function: FunctionCall{Name: "chat", Arguments: `{"message":"hello"}`},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(responses) != 2 {
+		t.Fatalf("expected 2 responses, got %d", len(responses))
+	}
+	if responses[0].Type != "history" || responses[0].Filter != "git" || responses[0].Count != 30 {
+		t.Errorf("unexpected history response: %#v", responses[0])
+	}
+	if responses[1].Type != "chat" || responses[1].Message != "hello" {
+		t.Errorf("unexpected chat response: %#v", responses[1])
+	}
+}
+
+func TestParseToolCalls_UnknownTool(t *testing.T) {
+	_, err := ParseToolCalls([]ToolCall{
+		{Function: FunctionCall{Name: "does-not-exist", Arguments: `{}`}},
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown tool")
+	}
+}
+
+func TestParseToolCalls_DefaultCount(t *testing.T) {
+	responses, err := ParseToolCalls([]ToolCall{
+		{Function: FunctionCall{Name: "screen", Arguments: `{}`}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if responses[0].Count != 50 {
+		t.Errorf("expected default count 50, got %d", responses[0].Count)
 	}
 }
 

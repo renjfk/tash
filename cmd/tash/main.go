@@ -348,17 +348,17 @@ func runUsage(cfg *data.Config) {
 
 	first := data.FormatTimestamp(stats.FirstCall)
 	last := data.FormatTimestamp(stats.LastCall)
-
 	fmt.Fprintf(os.Stderr, "Token usage (%s to %s)\n\n", first, last)
-	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s\n", "Action", "Calls", "Prompt", "Completion", "Total")
-	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s\n", "------", "-----", "------", "----------", "-----")
+
+	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s %10s\n", "Action", "Calls", "Prompt", "Cached", "Completion", "Total")
+	fmt.Fprintf(os.Stderr, "  %-12s %6s %10s %10s %10s %10s\n", "------", "-----", "------", "------", "----------", "-----")
 	if stats.Query.Calls > 0 {
-		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "query", stats.Query.Calls, stats.Query.Prompt, stats.Query.Comp, stats.Query.Prompt+stats.Query.Comp)
+		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d %10d\n", "query", stats.Query.Calls, stats.Query.Prompt, stats.Query.Cached, stats.Query.Comp, stats.Query.Prompt+stats.Query.Comp)
 	}
 	if stats.Rebuild.Calls > 0 {
-		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "rebuild", stats.Rebuild.Calls, stats.Rebuild.Prompt, stats.Rebuild.Comp, stats.Rebuild.Prompt+stats.Rebuild.Comp)
+		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d %10d\n", "rebuild", stats.Rebuild.Calls, stats.Rebuild.Prompt, stats.Rebuild.Cached, stats.Rebuild.Comp, stats.Rebuild.Prompt+stats.Rebuild.Comp)
 	}
-	fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d\n", "total", stats.TotalCalls, stats.TotalPrompt, stats.TotalComp, stats.TotalPrompt+stats.TotalComp)
+	fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d %10d\n", "total", stats.TotalCalls, stats.TotalPrompt, stats.TotalCached, stats.TotalComp, stats.TotalPrompt+stats.TotalComp)
 }
 
 var greetMessages = []string{

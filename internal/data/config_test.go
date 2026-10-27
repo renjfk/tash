@@ -537,3 +537,21 @@ behavior:
 func parseYAML(data []byte, v interface{}) error {
 	return yaml.Unmarshal(data, v)
 }
+
+func TestDefaultConfig_MaxTokensParam(t *testing.T) {
+	if got := DefaultConfig().Model.MaxTokensParam; got != "max_tokens" {
+		t.Errorf("expected default max_tokens_param max_tokens, got %q", got)
+	}
+}
+
+func TestValidate_InvalidMaxTokensParam(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Model.MaxTokensParam = "bogus"
+	err := cfg.validate()
+	if err == nil {
+		t.Fatal("expected error for invalid max_tokens_param")
+	}
+	if !strings.Contains(err.Error(), "model.max_tokens_param") {
+		t.Errorf("error should mention model.max_tokens_param: %v", err)
+	}
+}

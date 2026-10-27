@@ -3,14 +3,18 @@ package ai
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/renjfk/tash/internal/data"
 )
 
 func TestBuildQueryPrompt_InputOnly(t *testing.T) {
-	got := BuildQueryPrompt("list files", nil, nil)
-	if got != "list files" {
-		t.Errorf("expected just input, got %q", got)
+	got := BuildQueryPrompt("list files", nil, nil, time.Time{})
+	if !strings.Contains(got, "list files") {
+		t.Errorf("expected input in prompt, got %q", got)
+	}
+	if !strings.Contains(got, "Current time:") {
+		t.Error("expected current time in the user prompt")
 	}
 }
 
@@ -19,7 +23,7 @@ func TestBuildQueryPrompt_WithHistory(t *testing.T) {
 		{Command: "ls -la", ExitCode: 0, Time: 1700000001},
 		{Command: "cd /tmp", ExitCode: 0, Time: 1700000002},
 	}
-	got := BuildQueryPrompt("show files", history, nil)
+	got := BuildQueryPrompt("show files", history, nil, time.Time{})
 
 	if !strings.Contains(got, "Recent shell activity:") {
 		t.Error("expected shell activity header")
@@ -43,7 +47,7 @@ func TestBuildQueryPrompt_FailedCommand(t *testing.T) {
 	history := []data.ShellCommand{
 		{Command: "make build", ExitCode: 2, Time: 1700000001},
 	}
-	got := BuildQueryPrompt("fix it", history, nil)
+	got := BuildQueryPrompt("fix it", history, nil, time.Time{})
 
 	if !strings.Contains(got, "# exit 2") {
 		t.Error("expected exit code annotation for failed command")
@@ -57,7 +61,7 @@ func TestBuildQueryPrompt_ZeroTimestamp(t *testing.T) {
 	history := []data.ShellCommand{
 		{Command: "ls", ExitCode: 0, Time: 0},
 	}
-	got := BuildQueryPrompt("test", history, nil)
+	got := BuildQueryPrompt("test", history, nil, time.Time{})
 
 	if !strings.Contains(got, "[unknown]") {
 		t.Error("expected [unknown] for zero timestamp")
@@ -66,7 +70,7 @@ func TestBuildQueryPrompt_ZeroTimestamp(t *testing.T) {
 
 func TestBuildQueryPrompt_WithConstraints(t *testing.T) {
 	constraints := []string{"fzf is not installed, use an alternative"}
-	got := BuildQueryPrompt("search", nil, constraints)
+	got := BuildQueryPrompt("search", nil, constraints, time.Time{})
 
 	if !strings.Contains(got, "Constraints:") {
 		t.Error("expected constraints header")
@@ -79,7 +83,7 @@ func TestBuildQueryPrompt_WithConstraints(t *testing.T) {
 func TestBuildQueryPrompt_AllSections(t *testing.T) {
 	history := []data.ShellCommand{{Command: "git status", ExitCode: 0}}
 	constraints := []string{"rg is not installed"}
-	got := BuildQueryPrompt("find errors", history, constraints)
+	got := BuildQueryPrompt("find errors", history, constraints, time.Time{})
 
 	activityIdx := strings.Index(got, "Recent shell activity:")
 	constraintsIdx := strings.Index(got, "Constraints:")
@@ -100,6 +104,7 @@ func TestSystemPrompt_ContainsKeyPhrases(t *testing.T) {
 		"command",
 		"chat",
 		"JSONL",
+		"tool calls",
 		"history",
 		"memory",
 		"plan",
