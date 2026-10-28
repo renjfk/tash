@@ -5,6 +5,9 @@
 #   docker build -f e2e/Dockerfile -t tash-e2e .
 #   docker run --rm -e E2E_ENDPOINT -e E2E_MODEL -e E2E_API_KEY tash-e2e
 #   docker run --rm -e E2E_ENDPOINT -e E2E_MODEL -e E2E_API_KEY tash-e2e 02 10   # subset
+#   # approval scenario 19 additionally needs a reachable ntfy server:
+#   docker run --rm -e E2E_ENDPOINT -e E2E_MODEL -e E2E_API_KEY \
+#     -e E2E_NTFY_SERVER -e E2E_NTFY_TOKEN_ENV -e "${E2E_NTFY_TOKEN_ENV:-NTFY_ADMIN_TOKEN}" tash-e2e 19
 
 FROM golang:1.26 AS build
 WORKDIR /src

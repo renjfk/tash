@@ -23,6 +23,14 @@ E2E_API_KEY_ENV="${E2E_API_KEY_ENV:-E2E_API_KEY}"
 E2E_MAX_TOKENS_PARAM="${E2E_MAX_TOKENS_PARAM:-}"
 E2E_REASONING_EFFORT="${E2E_REASONING_EFFORT:-}"
 
+# Approval scenarios need a reachable ntfy server. They have no committed
+# default either, so they skip unless these are set (see AGENTS.local.md for
+# the self-hosted home server details):
+#   export E2E_NTFY_SERVER=https://ntfy.example.com
+#   export E2E_NTFY_TOKEN_ENV=NTFY_ADMIN_TOKEN   # env var holding the token
+E2E_NTFY_SERVER="${E2E_NTFY_SERVER:-}"
+E2E_NTFY_TOKEN_ENV="${E2E_NTFY_TOKEN_ENV:-NTFY_ADMIN_TOKEN}"
+
 E2E_TIMEOUT="${E2E_TIMEOUT:-30000}"
 E2E_KEEP="${E2E_KEEP:-0}"
 
@@ -65,6 +73,21 @@ e2e_require_env() {
     [ -n "${E2E_ENDPOINT:-}" ] || e2e_skip "E2E_ENDPOINT is not set"
     [ -n "${E2E_MODEL:-}" ] || e2e_skip "E2E_MODEL is not set"
     [ -n "${!E2E_API_KEY_ENV:-}" ] || e2e_skip "env $E2E_API_KEY_ENV is not set"
+}
+
+# Skips unless a reachable ntfy server and token are configured. Probes the
+# server so a home server that is offline or a bad token degrades to a skip
+# instead of a failure.
+e2e_require_ntfy() {
+    e2e_require_cmd curl
+    e2e_require_cmd jq
+    [ -n "${E2E_NTFY_SERVER:-}" ] || e2e_skip "E2E_NTFY_SERVER is not set"
+    [ -n "${!E2E_NTFY_TOKEN_ENV:-}" ] || e2e_skip "env $E2E_NTFY_TOKEN_ENV is not set"
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+        -H "Authorization: Bearer ${!E2E_NTFY_TOKEN_ENV}" \
+        "$E2E_NTFY_SERVER/v1/health" 2>/dev/null || true)"
+    [ "$code" = "200" ] || e2e_skip "ntfy server $E2E_NTFY_SERVER not reachable (HTTP ${code:-none})"
 }
 
 # --- isolated HOME -----------------------------------------------------------
@@ -138,6 +161,23 @@ e2e_init() {
     e2e_write_config
     "$E2E_BIN" init >"$E2E_HOME/init.out" 2>"$E2E_HOME/init.err" \
         || e2e_fail "tash init failed: $(tail -3 "$E2E_HOME/init.err")"
+}
+
+# Appends an enabled approval block to the config written by e2e_write_config.
+# e2e_approval_config <topic> <reply-topic> [wait-timeout] [timeframes-yaml]
+e2e_approval_config() {
+    local topic="$1" reply="$2" wait="${3:-60}" timeframes="${4:-[5m, 15m]}"
+    cat >> "$HOME/.config/tash/config.yaml" <<YAML
+approval:
+  enabled: true
+  timeframes: $timeframes
+  wait_timeout: $wait
+  ntfy:
+    server: $E2E_NTFY_SERVER
+    topic: $topic
+    reply_topic: $reply
+    token_env: $E2E_NTFY_TOKEN_ENV
+YAML
 }
 
 # --- tash CLI ----------------------------------------------------------------
@@ -239,6 +279,39 @@ e2e_wait_until() {
     local i=0
     while [ "$i" -lt "$secs" ]; do
         if "$@" >/dev/null 2>&1; then return 0; fi
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# --- approval (ntfy) ---------------------------------------------------------
+# Waits for an approval request on <topic> and taps its first timeframe button,
+# exactly as the ntfy app would: it reads the action's own URL/body/headers from
+# the notification and POSTs the body there. Using the button's URL (rather than
+# a locally derived reply topic) means a wrong button target or auth header
+# fails the scenario. Returns 0 on a successful tap, 1 if no request appears
+# within <seconds> (default 30), 2 if the tap POST fails.
+e2e_ntfy_approve() {
+    local topic="$1" secs="${2:-30}"
+    local token="${!E2E_NTFY_TOKEN_ENV}"
+    local i=0 json url body auth
+    while [ "$i" -lt "$secs" ]; do
+        json="$(curl -s --max-time 5 -H "Authorization: Bearer $token" \
+            "$E2E_NTFY_SERVER/$topic/json?poll=1" \
+            | jq -c 'select(.event=="message") | .actions[]? | select(.body|startswith("approve:"))' \
+            | head -1)"
+        if [ -n "$json" ]; then
+            url="$(printf '%s' "$json" | jq -r '.url')"
+            body="$(printf '%s' "$json" | jq -r '.body')"
+            auth="$(printf '%s' "$json" | jq -r '.headers.Authorization // .headers.authorization // empty')"
+            # Post with exactly the header the button carries (none if it has
+            # none), so a missing/incorrect embedded header fails like a real tap.
+            local args=(-fsS --max-time 5 -d "$body")
+            [ -n "$auth" ] && args+=(-H "Authorization: $auth")
+            curl "${args[@]}" "$url" >/dev/null || return 2
+            return 0
+        fi
         sleep 1
         i=$((i + 1))
     done

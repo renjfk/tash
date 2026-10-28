@@ -49,6 +49,8 @@ Environment:
 | `E2E_MAX_TOKENS_PARAM` | *(unset)* | `max_completion_tokens` for newer OpenAI models |
 | `E2E_REASONING_EFFORT` | *(unset)* | e.g. `none`; some models require it for function tools |
 | `E2E_TIMEOUT` | `30000` | Per-assertion timeout (ms) |
+| `E2E_NTFY_SERVER` | *(unset)* | ntfy base URL for the approval scenarios; unset = skip |
+| `E2E_NTFY_TOKEN_ENV` | `NTFY_ADMIN_TOKEN` | Name of the env var holding the ntfy token |
 
 ## Scenarios
 
@@ -69,6 +71,8 @@ Environment:
 | `15-screen-context` | screen-context plumbing degrades gracefully without Zellij |
 | `16-screen-zellij` | **real Zellij capture**: marker on-screen is read into context (container-only) |
 | `17-cancel` | Esc aborts an in-flight request and returns to the shell |
+| `18-approval-local` | approval gate blocks without a window; a local `--grant` bypasses it |
+| `19-approval-ntfy` | **real ntfy**: one-click approval unlocks a blocked query (needs `E2E_NTFY_*`) |
 
 ## How isolation works
 
@@ -98,6 +102,30 @@ at the absolute path of the binary under test (`E2E_TASH_BIN`, default
 ## Known gaps / TODO
 
 - Legacy JSONL fallback (needs an endpoint that rejects `tools`).
+
+## Approval scenarios (ntfy)
+
+`19-approval-ntfy` exercises the real one-click approval loop against a live
+ntfy server. It has no committed default and skips unless `E2E_NTFY_SERVER` and
+the token named by `E2E_NTFY_TOKEN_ENV` are set. The server is probed first, so
+an unreachable server (or bad token) also skips rather than fails:
+
+```sh
+export E2E_NTFY_SERVER=https://ntfy.example.com
+export E2E_NTFY_TOKEN_ENV=NTFY_ADMIN_TOKEN   # env var holding the token
+```
+
+It uses a unique topic per run, starts `tash query` in the background, then acts
+as the approver: it polls the request topic, reads the button's own URL and body
+from the notification, and POSTs the body there - the same request the ntfy app
+makes on a tap, so a wrong button target also fails the scenario. `18-approval-local`
+is hermetic (unreachable ntfy server) and needs no ntfy server; it proves the gate
+blocks with no window and a local `--grant` bypasses it.
+
+Through the `actions_token_env` fallback, each run publishes a message whose
+action header carries the configured token, and that message stays cached on the
+server for a while. Prefer a dedicated token restricted to the `tash-e2e-*`
+topics (ntfy supports wildcard access rules) over the admin token.
 
 ## Container-only scenario
 

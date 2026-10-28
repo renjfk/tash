@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ Usage:
   tash query <input>          AI-assisted command generation
   tash init                   First-time setup (profile, fish integration)
   tash usage [--reset]        Show token usage stats (or reset them)
+  tash approval [--reset]     Show the usage approval window (or clear it)
+  tash approval --grant <dur> Manually grant a usage window (e.g. 30m)
   tash reset                  Clear conversation history (keeps memories)
   tash clear                  Clear everything (conversation + memories)
   tash version                Print version
@@ -110,6 +113,9 @@ func main() {
 	case "usage":
 		runUsage(cfg)
 
+	case "approval":
+		runApproval(cfg)
+
 	default:
 		data.Error(fmt.Sprintf("unknown command %q", os.Args[1]))
 		fmt.Fprintln(os.Stderr, usageText)
@@ -118,6 +124,15 @@ func main() {
 }
 
 func runQuery(cfg *data.Config, input string, session string, outputFile string) {
+	if err := query.EnsureApproval(cfg, input); err != nil {
+		if errors.Is(err, query.ErrApprovalCancelled) {
+			data.Info("cancelled")
+			return
+		}
+		data.Error(err.Error())
+		os.Exit(1)
+	}
+
 	prof, err := data.ReadProfile(cfg.DataDir())
 	if err != nil {
 		data.Warn("no profile found, run 'tash init' first")
@@ -359,6 +374,70 @@ func runUsage(cfg *data.Config) {
 		fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d %10d\n", "rebuild", stats.Rebuild.Calls, stats.Rebuild.Prompt, stats.Rebuild.Cached, stats.Rebuild.Comp, stats.Rebuild.Prompt+stats.Rebuild.Comp)
 	}
 	fmt.Fprintf(os.Stderr, "  %-12s %6d %10d %10d %10d %10d\n", "total", stats.TotalCalls, stats.TotalPrompt, stats.TotalCached, stats.TotalComp, stats.TotalPrompt+stats.TotalComp)
+}
+
+func runApproval(cfg *data.Config) {
+	args := os.Args[2:]
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--reset":
+			if err := data.ClearApproval(cfg.DataDir()); err != nil {
+				data.Error("approval reset: " + err.Error())
+				os.Exit(1)
+			}
+			data.Info("approval window cleared")
+			return
+		case "--grant":
+			if i+1 >= len(args) {
+				data.Error("approval --grant requires a duration (e.g. 30m)")
+				os.Exit(1)
+			}
+			dur := args[i+1]
+			d, err := time.ParseDuration(dur)
+			if err != nil || d <= 0 {
+				data.Error("invalid duration: " + dur)
+				os.Exit(1)
+			}
+			if cfg.Approval.Enabled && !isApprovalTimeframe(cfg.Approval.Timeframes, dur) {
+				data.Error("duration must match a configured approval.timeframes value")
+				os.Exit(1)
+			}
+			state, err := data.GrantApproval(cfg.DataDir(), dur, d, time.Now())
+			if err != nil {
+				data.Error("approval grant: " + err.Error())
+				os.Exit(1)
+			}
+			data.Info(fmt.Sprintf("usage approved for %s (until %s)", dur, time.Unix(state.AllowedUntil, 0).Format("15:04")))
+			return
+		}
+	}
+
+	if !cfg.Approval.Enabled {
+		data.Info("approval gate is disabled (approval.enabled: false)")
+		return
+	}
+
+	state, err := data.LoadApprovalState(cfg.DataDir())
+	if err != nil {
+		data.Error("load approval: " + err.Error())
+		os.Exit(1)
+	}
+	remaining := state.Remaining(time.Now())
+	if remaining <= 0 {
+		data.Info("no active approval window")
+		return
+	}
+	data.Info(fmt.Sprintf("usage approved for %s, %s remaining", state.Timeframe, remaining.Round(time.Second)))
+}
+
+// isApprovalTimeframe reports whether value is one of the configured timeframes.
+func isApprovalTimeframe(timeframes []string, value string) bool {
+	for _, tf := range timeframes {
+		if tf == value {
+			return true
+		}
+	}
+	return false
 }
 
 var greetMessages = []string{

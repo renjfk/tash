@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/renjfk/tash/internal/data"
 )
@@ -81,6 +82,21 @@ func TestHandleFailedCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestShouldIntercept(t *testing.T) {
+	cases := map[string]bool{
+		"git push --forc":           true,
+		"find large files here":     true,
+		"ls":                        false,
+		"ls | grep foo":             false,
+		"notarealcmd123 subcommand": false,
+	}
+	for command, want := range cases {
+		if got := shouldIntercept(command); got != want {
+			t.Errorf("shouldIntercept(%q) = %v, want %v", command, got, want)
+		}
 	}
 }
 
@@ -433,4 +449,36 @@ func TestTickBackgroundUpdate_VersionCheckDisabled(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "last_version_check")); !os.IsNotExist(err) {
 		t.Error("expected no version check when disabled")
 	}
+}
+
+func TestApprovalGateClosed(t *testing.T) {
+	t.Run("disabled", func(t *testing.T) {
+		cfg := data.DefaultConfig()
+		cfg.SetDataDir(t.TempDir())
+		if approvalGateClosed(cfg) {
+			t.Error("disabled gate should not be closed")
+		}
+	})
+
+	t.Run("enabled without window", func(t *testing.T) {
+		cfg := data.DefaultConfig()
+		cfg.SetDataDir(t.TempDir())
+		cfg.Approval.Enabled = true
+		if !approvalGateClosed(cfg) {
+			t.Error("enabled gate without a window should be closed")
+		}
+	})
+
+	t.Run("enabled with window", func(t *testing.T) {
+		dir := t.TempDir()
+		cfg := data.DefaultConfig()
+		cfg.SetDataDir(dir)
+		cfg.Approval.Enabled = true
+		if _, err := data.GrantApproval(dir, "15m", 15*time.Minute, time.Now()); err != nil {
+			t.Fatalf("GrantApproval: %v", err)
+		}
+		if approvalGateClosed(cfg) {
+			t.Error("active window should open the gate")
+		}
+	})
 }

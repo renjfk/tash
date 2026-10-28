@@ -12,13 +12,14 @@ accepted commands into the fish command line buffer via `commandline -r`.
 
 ## Architecture
 
-Five packages under `internal/` — nothing exported for external consumption.
+Six packages under `internal/` — nothing exported for external consumption.
 
 - `cmd/tash/` — thin CLI entry (`main.go`), post-exec hook (`tick.go`), profile rebuild (`rebuild.go`)
 - `internal/ai/` — OpenAI-compatible API client, system prompt
 - `internal/ai/tools/` — native tool-call definitions and schemas exposed to the model
-- `internal/data/` — all persistent state: config, conversation, history, profile, usage, logging
-- `internal/query/` — query orchestration: AI call, response parsing, tool validation, screen capture
+- `internal/data/` — all persistent state: config, conversation, history, profile, usage, approval, logging
+- `internal/ntfy/` — minimal ntfy client (publish with action buttons, poll reply topic)
+- `internal/query/` — query orchestration: AI call, response parsing, tool validation, screen capture, approval gate
 - `internal/tui/` — spinner + suggestion prompt (bubbletea)
 
 ### Key Invariants
@@ -29,6 +30,9 @@ Five packages under `internal/` — nothing exported for external consumption.
   targets current pane via `$ZELLIJ_PANE_ID`. Quiet failure — no version check.
 - `conversation.jsonl` is append-only, read from tail. Initial load: 20 entries + memories.
 - `tash tick` must return instantly.
+- Approval gate (`approval.enabled`) is enforced in `runQuery` via `query.EnsureApproval` before any AI
+  work. One-click ntfy buttons POST `approve:<nonce>:<timeframe>` to the reply topic; tash polls it and
+  only accepts its own nonce and a configured timeframe. Disabled by default.
 
 ## Build Commands
 

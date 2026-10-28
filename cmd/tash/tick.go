@@ -41,10 +41,23 @@ func tickRun(cfg *data.Config, exitCode int, command string, session string) err
 		}
 	}
 
-	// Skip auto-intercept for SIGINT (130) — user cancelled deliberately
+	// Skip auto-intercept for SIGINT (130) — user cancelled deliberately.
+	// Also skip while the approval gate is closed: a failed command (often a
+	// typo) must not fire an ntfy request or block the shell behind a wait.
 	if exitCode != 0 && exitCode != 130 && cfg.Behavior.AutoIntercept {
-		slog.Debug("checking auto-intercept", "command", command, "exit_code", exitCode)
-		handleFailedCommand(command)
+		if approvalGateClosed(cfg) {
+			// 127 marks an unknown command: fish_command_not_found already ran
+			// tash query (and reported its outcome), and this tick is only the
+			// backgrounded follow-up, so a hint here would be redundant and
+			// race the shell prompt.
+			if exitCode != 127 && shouldIntercept(command) {
+				slog.Debug("auto-intercept skipped, approval window closed", "command", command)
+				data.Info("approval required, use 'q <request>' to ask for usage")
+			}
+		} else {
+			slog.Debug("checking auto-intercept", "command", command, "exit_code", exitCode)
+			handleFailedCommand(command)
+		}
 	}
 
 	// Check for version updates independently of profile rebuild.
@@ -239,35 +252,48 @@ func tickBackgroundUpdate(cfg *data.Config) error {
 	return writeLastRebuild(dataDir, time.Now().Unix())
 }
 
-// handleFailedCommand checks whether a failed command should be auto-intercepted.
+// approvalGateClosed reports whether the approval gate is enabled and no usage
+// window is currently active. It only reads local state so tick stays instant.
+func approvalGateClosed(cfg *data.Config) bool {
+	if !cfg.Approval.Enabled {
+		return false
+	}
+	state, err := data.LoadApprovalState(cfg.DataDir())
+	if err != nil {
+		return true
+	}
+	return !state.Active(time.Now())
+}
+
+// shouldIntercept reports whether a failed command should be auto-intercepted.
 // It catches failed CLI commands where the binary exists in PATH (e.g. "helm update",
 // "git push --forc"), and natural language typed into the shell (3+ words with no
-// shell syntax). Exits with code 7 to signal the fish hook to invoke tash query.
-func handleFailedCommand(command string) {
+// shell syntax).
+func shouldIntercept(command string) bool {
 	words := strings.Fields(command)
 	if len(words) < 2 {
 		slog.Debug("auto-intercept: too few words, skipping", "command", command)
-		return
+		return false
 	}
 
 	// Reject shell pipelines and compound commands — these are intentional
 	// constructs, not typos or natural language
 	if strings.ContainsAny(command, "|;&><$`(){}") {
 		slog.Debug("auto-intercept: has shell operators, skipping", "command", command)
-		return
+		return false
 	}
 
 	// If the first word is a real binary in PATH, intercept — the user ran a
 	// valid tool with wrong args/subcommand (e.g. "helm update", "git push --forc")
 	if _, err := exec.LookPath(words[0]); err == nil {
 		slog.Debug("auto-intercept: failed command with valid binary", "command", command)
-		os.Exit(7)
+		return true
 	}
 
 	// 3+ words without shell syntax: likely natural language
 	if len(words) < 3 {
 		slog.Debug("auto-intercept: 2 words, first not in PATH, skipping", "command", command)
-		return
+		return false
 	}
 
 	// Reject flags, paths, assignments, and file-like arguments
@@ -276,18 +302,26 @@ func handleFailedCommand(command string) {
 			strings.Contains(w, "/") ||
 			strings.Contains(w, "=") {
 			slog.Debug("auto-intercept: has flags/paths/assignments, skipping", "command", command)
-			return
+			return false
 		}
 	}
 	for _, w := range words[1:] {
 		if strings.Contains(w, ".") && !strings.HasSuffix(w, ".") {
 			slog.Debug("auto-intercept: has file-like argument, skipping", "command", command)
-			return
+			return false
 		}
 	}
 
 	slog.Debug("auto-intercept: natural language detected", "command", command)
-	os.Exit(7)
+	return true
+}
+
+// handleFailedCommand exits with code 7 to signal the fish hook to invoke
+// tash query when the failed command should be auto-intercepted.
+func handleFailedCommand(command string) {
+	if shouldIntercept(command) {
+		os.Exit(7)
+	}
 }
 
 func forkUpdate() error {

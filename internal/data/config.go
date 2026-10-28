@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -17,8 +19,28 @@ type Config struct {
 	Profile  ProfileConfig  `yaml:"profile"`
 	Theme    ThemeConfig    `yaml:"theme"`
 	Terminal TerminalConfig `yaml:"terminal"`
+	Approval ApprovalConfig `yaml:"approval"`
 	LogLevel string         `yaml:"log_level"`
 	dataDir  string
+}
+
+// ApprovalConfig holds Screen Time-style usage approval settings. When enabled,
+// tash refuses to run until an approver taps a one-click timeframe button in an
+// ntfy notification. The grant lasts for the chosen timeframe.
+type ApprovalConfig struct {
+	Enabled     bool       `yaml:"enabled"`      // gate every query behind an ntfy approval
+	Timeframes  []string   `yaml:"timeframes"`   // one-click grant durations, e.g. 15m, 30m, 1h
+	WaitTimeout int        `yaml:"wait_timeout"` // seconds to wait for an approval tap before giving up
+	Ntfy        NtfyConfig `yaml:"ntfy"`
+}
+
+// NtfyConfig holds the ntfy server connection used for approval requests.
+type NtfyConfig struct {
+	Server          string `yaml:"server"`            // ntfy server base URL
+	Topic           string `yaml:"topic"`             // topic approvers subscribe to
+	ReplyTopic      string `yaml:"reply_topic"`       // topic button taps publish to (default: <topic>-reply)
+	TokenEnv        string `yaml:"token_env"`         // env var holding the ntfy access token, optional
+	ActionsTokenEnv string `yaml:"actions_token_env"` // env var holding a restricted token embedded in buttons, optional
 }
 
 // ThemeConfig holds color theme settings.
@@ -95,6 +117,14 @@ func DefaultConfig() *Config {
 			RebuildInterval: 86400,
 			HistoryPath:     "~/.local/share/fish/fish_history",
 		},
+		Approval: ApprovalConfig{
+			Enabled:     false,
+			Timeframes:  []string{"15m", "30m", "1h"},
+			WaitTimeout: 120,
+			Ntfy: NtfyConfig{
+				Server: "https://ntfy.sh",
+			},
+		},
 	}
 }
 
@@ -166,6 +196,7 @@ func (c *Config) validate() error {
 	if c.Profile.RebuildInterval <= 0 {
 		errs = append(errs, fmt.Sprintf("profile.rebuild_interval: must be positive, got %d", c.Profile.RebuildInterval))
 	}
+	errs = append(errs, c.Approval.validate()...)
 
 	if len(errs) > 0 {
 		return fmt.Errorf("invalid config:\n  %s", strings.Join(errs, "\n  "))
@@ -176,6 +207,49 @@ func (c *Config) validate() error {
 var logLevels = []string{"debug", "info", "warn", "error"}
 var terminalColors = []string{"auto", "256", "16", "none"}
 var maxTokensParams = []string{"max_tokens", "max_completion_tokens"}
+
+// ntfyTopicPattern matches valid ntfy topic names (1-64 chars of [-_A-Za-z0-9]).
+var ntfyTopicPattern = regexp.MustCompile(`^[-_A-Za-z0-9]{1,64}$`)
+
+// maxApprovalActions is ntfy's per-message action button limit.
+const maxApprovalActions = 3
+
+// validate returns errors for an invalid approval configuration. It only checks
+// fields when the gate is enabled, so a disabled block never blocks startup.
+func (a *ApprovalConfig) validate() []string {
+	if !a.Enabled {
+		return nil
+	}
+
+	var errs []string
+	if a.Ntfy.Topic == "" {
+		errs = append(errs, "approval.ntfy.topic: required when approval.enabled is true")
+	} else if !ntfyTopicPattern.MatchString(a.Ntfy.Topic) {
+		errs = append(errs, fmt.Sprintf("approval.ntfy.topic: %q is not a valid ntfy topic (1-64 chars of [-_A-Za-z0-9])", a.Ntfy.Topic))
+	}
+	if a.Ntfy.ReplyTopic != "" && !ntfyTopicPattern.MatchString(a.Ntfy.ReplyTopic) {
+		errs = append(errs, fmt.Sprintf("approval.ntfy.reply_topic: %q is not a valid ntfy topic (1-64 chars of [-_A-Za-z0-9])", a.Ntfy.ReplyTopic))
+	}
+	if a.Ntfy.Server != "" && !strings.HasPrefix(a.Ntfy.Server, "http://") && !strings.HasPrefix(a.Ntfy.Server, "https://") {
+		errs = append(errs, fmt.Sprintf("approval.ntfy.server: %q must start with http:// or https://", a.Ntfy.Server))
+	}
+	if len(a.Timeframes) == 0 {
+		errs = append(errs, "approval.timeframes: at least one timeframe is required when approval.enabled is true")
+	}
+	if len(a.Timeframes) > maxApprovalActions {
+		errs = append(errs, fmt.Sprintf("approval.timeframes: ntfy supports at most %d action buttons, got %d", maxApprovalActions, len(a.Timeframes)))
+	}
+	for _, tf := range a.Timeframes {
+		d, err := time.ParseDuration(tf)
+		if err != nil || d <= 0 {
+			errs = append(errs, fmt.Sprintf("approval.timeframes: %q is not a positive duration (e.g. 15m, 1h)", tf))
+		}
+	}
+	if a.WaitTimeout <= 0 {
+		errs = append(errs, fmt.Sprintf("approval.wait_timeout: must be positive, got %d", a.WaitTimeout))
+	}
+	return errs
+}
 
 // themeNames is set by RegisterThemeNames at startup. Falls back to empty.
 var themeNames []string
@@ -335,6 +409,24 @@ func buildConfigComments() map[string]fieldComment {
 			children: map[string]fieldComment{
 				"ascii": {comment: "use ASCII-only characters, no Unicode (true/false)"},
 				"color": {comment: "color profile: " + strings.Join(terminalColors, ", ")},
+			},
+		},
+		"approval": {
+			comment: "Screen Time-style usage approval via ntfy (disabled by default)",
+			children: map[string]fieldComment{
+				"enabled":      {comment: "gate every query behind an ntfy approval, cleared by a one-click timeframe (true/false)"},
+				"timeframes":   {comment: "one-click grant durations offered in the notification (max 3), e.g. [15m, 30m, 1h]"},
+				"wait_timeout": {comment: "seconds to wait for an approval tap before giving up"},
+				"ntfy": {
+					comment: "ntfy server and topics for approval requests",
+					children: map[string]fieldComment{
+						"server":            {comment: "ntfy server base URL (https://ntfy.sh or self-hosted)"},
+						"topic":             {comment: "topic approvers subscribe to for approval requests"},
+						"reply_topic":       {comment: "topic button taps publish to (default: <topic>-reply)"},
+						"token_env":         {comment: "environment variable holding the ntfy access token, optional"},
+						"actions_token_env": {comment: "environment variable holding a restricted token embedded in buttons, optional"},
+					},
+				},
 			},
 		},
 		"log_level": {

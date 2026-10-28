@@ -79,6 +79,11 @@ Helpers available in `e2e/lib.sh`: `e2e_setup`, `e2e_init`, `e2e_query`,
 `e2e_query_was_called`, `e2e_tt_open_fish`, `e2e_tt_type_enter`, `e2e_tt_enter`,
 `e2e_tt_expect`, `e2e_tt_expect_line`, `e2e_tt_expect_output`, `e2e_tt_close`.
 
+Approval scenarios add `e2e_require_ntfy` (skips unless a reachable ntfy server
+and token are configured), `e2e_approval_config` (appends an enabled approval
+block to the config), and `e2e_ntfy_approve` (polls the request topic and taps
+the timeframe button). See `18-approval-local` and `19-approval-ntfy`.
+
 ## Guardrails
 
 - Do not commit the API key; it is supplied via the environment.

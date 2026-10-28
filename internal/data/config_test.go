@@ -555,3 +555,94 @@ func TestValidate_InvalidMaxTokensParam(t *testing.T) {
 		t.Errorf("error should mention model.max_tokens_param: %v", err)
 	}
 }
+
+func TestDefaultConfig_Approval(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Approval.Enabled {
+		t.Error("expected approval disabled by default")
+	}
+	if len(cfg.Approval.Timeframes) != 3 {
+		t.Errorf("expected 3 default timeframes, got %v", cfg.Approval.Timeframes)
+	}
+	if cfg.Approval.WaitTimeout != 120 {
+		t.Errorf("expected wait_timeout 120, got %d", cfg.Approval.WaitTimeout)
+	}
+	if cfg.Approval.Ntfy.Server != "https://ntfy.sh" {
+		t.Errorf("expected ntfy.sh server, got %q", cfg.Approval.Ntfy.Server)
+	}
+}
+
+func TestValidate_ApprovalDisabledIgnoresFields(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Approval.Enabled = false
+	cfg.Approval.Ntfy.Topic = ""
+	cfg.Approval.Timeframes = nil
+	if err := cfg.validate(); err != nil {
+		t.Errorf("disabled approval block should not fail validation: %v", err)
+	}
+}
+
+func TestValidate_ApprovalEnabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Approval.Enabled = true
+	cfg.Approval.Ntfy.Topic = "tash-approval"
+	if err := cfg.validate(); err != nil {
+		t.Errorf("valid approval config should pass: %v", err)
+	}
+}
+
+func TestValidate_ApprovalInvalid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Approval.Enabled = true
+	cfg.Approval.Ntfy.Topic = ""
+	cfg.Approval.Ntfy.Server = "ntfy.sh"
+	cfg.Approval.Timeframes = []string{"15m", "banana"}
+	cfg.Approval.WaitTimeout = 0
+	err := cfg.validate()
+
+	if err == nil {
+		t.Fatal("expected error for invalid approval config")
+	}
+	for _, field := range []string{
+		"approval.ntfy.topic",
+		"approval.ntfy.server",
+		"approval.timeframes",
+		"approval.wait_timeout",
+	} {
+		if !strings.Contains(err.Error(), field) {
+			t.Errorf("error should mention %s: %v", field, err)
+		}
+	}
+}
+
+func TestValidate_ApprovalTooManyTimeframes(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Approval.Enabled = true
+	cfg.Approval.Ntfy.Topic = "tash"
+	cfg.Approval.Timeframes = []string{"5m", "15m", "30m", "1h"}
+	err := cfg.validate()
+	if err == nil {
+		t.Fatal("expected error for more than 3 timeframes")
+	}
+	if !strings.Contains(err.Error(), "approval.timeframes") {
+		t.Errorf("error should mention approval.timeframes: %v", err)
+	}
+}
+
+func TestRenderConfig_ApprovalComments(t *testing.T) {
+	cfg := DefaultConfig()
+	data, err := renderConfig(cfg)
+	if err != nil {
+		t.Fatalf("renderConfig: %v", err)
+	}
+	out := string(data)
+	for _, want := range []string{
+		"# Screen Time-style usage approval via ntfy (disabled by default)",
+		"# ntfy server and topics for approval requests",
+		"approval:",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in rendered config", want)
+		}
+	}
+}

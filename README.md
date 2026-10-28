@@ -33,6 +33,7 @@ the result directly into your command line buffer for you to review, edit, or ru
 - Validates suggested commands against your actual PATH before showing them
 - Reads terminal screen content via [Zellij](https://zellij.dev/) when available, so the AI can see error output
 - Handles multi-step tasks with interactive approval for each step
+- Optional Screen Time-style usage gate: an approver taps a timeframe in an [ntfy](https://ntfy.sh/) notification to unlock tash
 - Press Esc to cancel any in-flight AI request and return to the shell immediately
 - Works with any OpenAI-compatible API endpoint
 - Supports provider-specific request options such as `reasoning_effort` and `chat_template_kwargs`
@@ -107,9 +108,12 @@ or run them before pressing Enter.
 
 | Command                | Description                                 |
 |------------------------|---------------------------------------------|
-| `tash query <input>`   | Ask the AI for a command or chat            |
-| `tash usage [--reset]` | Show or reset token usage stats             |
-| `tash reset`           | Clear conversation history (keeps memories) |
+| `tash query <input>`   | Ask the AI for a command or chat               |
+| `tash usage [--reset]` | Show or reset token usage stats                |
+| `tash approval`        | Show the active usage approval window          |
+| `tash approval --reset`| Clear the active usage approval window         |
+| `tash approval --grant <dur>` | Manually grant a usage window (e.g. `30m`) |
+| `tash reset`           | Clear conversation history (keeps memories)    |
 | `tash clear`           | Clear everything (conversation + memories)  |
 | `tash version`         | Print version                               |
 
@@ -140,6 +144,14 @@ inline comments describing each field and its valid values. Invalid values cause
 | `theme.color`                       | Custom hex color, overrides theme name                                         |
 | `terminal.ascii`                    | Use ASCII-only characters for limited Unicode terminals                        |
 | `terminal.color`                    | Color profile override: `auto`, `256`, `16`, `none`                            |
+| `approval.enabled`                  | Gate every query behind an ntfy approval (default false)                       |
+| `approval.timeframes`               | One-click grant durations offered in the notification (default `15m`, `30m`, `1h`) |
+| `approval.wait_timeout`             | Seconds to wait for an approval tap before giving up (default 120)             |
+| `approval.ntfy.server`              | ntfy server base URL (default `https://ntfy.sh`)                               |
+| `approval.ntfy.topic`               | Topic approvers subscribe to (required when enabled)                           |
+| `approval.ntfy.reply_topic`         | Topic button taps publish to (default `<topic>-reply`)                         |
+| `approval.ntfy.token_env`           | Environment variable holding the ntfy access token, optional                   |
+| `approval.ntfy.actions_token_env`   | Environment variable holding a restricted token embedded in buttons, optional  |
 
 Available themes: `solarized` `gruvbox` `nord` `dracula` `monokai` `catppuccin`
 `tokyo-night` `rose-pine` `kanagawa` `everforest` `onedark` `nightfox`
@@ -158,6 +170,55 @@ model:
 
 If your provider returns visible reasoning text or tags such as `<think>...</think>`, tash removes those before parsing the response so command suggestions and chat output stay clean.
 
+### Usage Approval (Screen Time)
+
+tash can optionally gate every query behind an approval, much like Apple's Screen Time. When no usage
+window is active, tash pushes an [ntfy](https://ntfy.sh/) notification to a topic of your choice. The
+notification contains one-click buttons for each configured timeframe. An approver simply taps a
+button, and tash unlocks for that duration (for example 30 minutes), then asks for approval again.
+
+```yaml
+approval:
+  enabled: true
+  timeframes: ["15m", "30m", "1h"]
+  wait_timeout: 120
+  ntfy:
+    server: https://ntfy.sh
+    topic: tash-approval-your-secret-topic
+    # reply_topic: tash-approval-your-secret-topic-reply  # default: <topic>-reply
+    # token_env: NTFY_TOKEN                               # optional, for authenticated servers
+    # actions_token_env: NTFY_ACTIONS_TOKEN               # optional, restricted token embedded in buttons
+```
+
+How it works:
+
+- tash publishes to `approval.ntfy.topic`; approvers subscribe to that topic in the ntfy app.
+- Up to 3 timeframe buttons are offered (ntfy's per-message action limit).
+- Each button POSTs an approval back to `approval.ntfy.reply_topic`, which tash polls while it waits.
+- The grant is recorded in `approval.json` and honored until it expires; `tash approval` shows the
+  remaining time and `tash approval --reset` clears it early.
+- The wait polls the reply topic every 5 seconds and gives up after `wait_timeout` seconds. Accepted
+  command output still goes to your shell only after approval.
+- Auto-intercept is paused while the gate is closed, so failed commands and typos never page the
+  approver. When a failed command would have been intercepted, tash prints
+  `tash: approval required, use 'q <request>' to ask for usage` instead.
+
+> [!NOTE]
+> The gate is advisory, not tamper-resistant: whoever controls the machine owns `config.yaml` and
+> `approval.json`, so it is meant to reduce friction and prompt a conversation, not to stop a
+> determined user. `tash approval --grant <dur>` grants a window locally (limited to the configured
+> timeframes when the gate is enabled).
+
+> [!NOTE]
+> The notification includes a short preview of your query and a `user@host` label, and is published to
+> the ntfy server you configure (public ntfy.sh by default, where messages are cached for a while). Use
+> a hard-to-guess topic, or point tash at a self-hosted ntfy with authentication.
+
+> [!WARNING]
+> When `actions_token_env` is unset, the token from `token_env` is embedded in the notification's action
+> buttons. That header is visible to every subscriber and device of the topic. Set `actions_token_env` to
+> a token restricted to the reply topic if you do not want to expose the main token.
+
 ### Data Directory
 
 All state is stored in `~/.config/tash/`:
@@ -168,6 +229,7 @@ All state is stored in `~/.config/tash/`:
 | `profile.md`           | AI-generated user profile (system info, tools, frequent commands) |
 | `conversation.jsonl`   | Conversation history (append-only)                                |
 | `usage.json`           | Token usage statistics                                            |
+| `approval.json`        | Active Screen Time-style usage approval window                    |
 | `tash.log`             | Log file (rotates at 5MB)                                         |
 | `last_profile_rebuild` | Timestamp of last background profile rebuild                      |
 | `last_version_check`   | Timestamp of last GitHub releases API check                       |

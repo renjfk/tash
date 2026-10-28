@@ -181,10 +181,24 @@ func TestUsageText_Contains(t *testing.T) {
 		"tash reset",
 		"tash clear",
 		"tash version",
+		"tash approval",
 	}
 	for _, check := range checks {
 		if !strings.Contains(usageText, check) {
 			t.Errorf("usageText missing %q", check)
 		}
+	}
+}
+
+func TestIsApprovalTimeframe(t *testing.T) {
+	timeframes := []string{"15m", "30m", "1h"}
+	if !isApprovalTimeframe(timeframes, "30m") {
+		t.Error("expected 30m to be allowed")
+	}
+	if isApprovalTimeframe(timeframes, "2h") {
+		t.Error("expected 2h to be rejected")
+	}
+	if isApprovalTimeframe(nil, "15m") {
+		t.Error("expected no timeframes to reject everything")
 	}
 }
